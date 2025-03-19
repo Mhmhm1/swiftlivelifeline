@@ -24,7 +24,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       if (
         !location.pathname.includes("/login") &&
         !location.pathname.includes("/register") &&
-        !location.pathname.includes("/")
+        location.pathname !== "/"
       ) {
         navigate("/login");
       }

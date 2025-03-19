@@ -1,5 +1,5 @@
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -11,17 +11,28 @@ const Login: React.FC = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const { login, isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
+
+  // Direct redirection after login
+  useEffect(() => {
+    if (isAuthenticated) {
+      if (user?.role === "admin") {
+        navigate("/admin/dashboard");
+      } else if (user?.role === "driver") {
+        navigate("/driver/dashboard");
+      } else if (user?.role === "user") {
+        navigate("/user/dashboard");
+      }
+    }
+  }, [isAuthenticated, user, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
-      const success = await login(email, password);
-      if (success) {
-        // Navigation will happen in Layout component
-      }
+      await login(email, password);
+      // Navigation will happen in useEffect above
     } finally {
       setLoading(false);
     }
