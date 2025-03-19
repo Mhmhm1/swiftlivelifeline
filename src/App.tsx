@@ -28,6 +28,7 @@ import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminRequests from "./pages/admin/AdminRequests";
 import AdminDrivers from "./pages/admin/AdminDrivers";
 import AdminRequestDetails from "./pages/admin/AdminRequestDetails";
+import MigrateData from "./pages/admin/MigrateData";
 
 const queryClient = new QueryClient();
 
@@ -60,6 +61,7 @@ const App = () => (
               <Route path="/admin/requests" element={<AdminRequests />} />
               <Route path="/admin/drivers" element={<AdminDrivers />} />
               <Route path="/admin/request/:requestId" element={<AdminRequestDetails />} />
+              <Route path="/admin/migrate" element={<MigrateData />} />
               
               {/* 404 - Not Found */}
               <Route path="*" element={<NotFound />} />

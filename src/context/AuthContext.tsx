@@ -1,6 +1,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 // Define user types
 export type UserRole = "user" | "driver" | "admin";
@@ -70,9 +71,10 @@ interface AuthContextType {
   updateDriverAvailability: (driverId: string, available: boolean) => void;
   updateDriverSchedule: (driverId: string, onSchedule: boolean) => void;
   updateDriverLocation: (driverId: string, location: string) => void;
-  getDrivers: () => UserData[];
-  getAvailableDrivers: () => UserData[];
-  getUserById: (id: string) => UserData | undefined;
+  getDrivers: () => Promise<UserData[]>;
+  getAvailableDrivers: () => Promise<UserData[]>;
+  getUserById: (id: string) => Promise<UserData | undefined>;
+  migrateMockDataToSupabase: () => Promise<{ success: boolean, message: string }>;
 }
 
 // Create a context with a default value
@@ -86,133 +88,260 @@ const AuthContext = createContext<AuthContextType>({
   updateDriverAvailability: () => {},
   updateDriverSchedule: () => {},
   updateDriverLocation: () => {},
-  getDrivers: () => [],
-  getAvailableDrivers: () => [],
-  getUserById: () => undefined,
+  getDrivers: async () => [],
+  getAvailableDrivers: async () => [],
+  getUserById: async () => undefined,
+  migrateMockDataToSupabase: async () => ({ success: false, message: "Not implemented" }),
 });
 
 // Create a provider component
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [user, setUser] = useState<UserData | null>(null);
-  const [users, setUsers] = useState<(UserData & { password: string })[]>([]);
-  const [drivers, setDrivers] = useState<UserData[]>([]);
 
-  // Initialize with predefined accounts
+  // Check for existing session on component mount
   useEffect(() => {
-    // Load data from localStorage or use predefined accounts
-    const savedUsers = localStorage.getItem("users");
-    const savedDrivers = localStorage.getItem("drivers");
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+        
+        if (profile) {
+          setUser({
+            id: profile.id,
+            name: profile.name,
+            email: profile.email || '',
+            role: profile.role as UserRole,
+            phone: profile.phone,
+            gender: profile.gender,
+            profileImage: profile.photo_url,
+            vehicleNumber: profile.vehicle_number,
+            available: profile.available,
+            location: profile.current_location,
+            onSchedule: profile.on_schedule,
+          });
+          setIsAuthenticated(true);
+        }
+      }
+    };
     
-    if (savedUsers) {
-      setUsers(JSON.parse(savedUsers));
-    } else {
-      setUsers(PREDEFINED_ACCOUNTS);
-      localStorage.setItem("users", JSON.stringify(PREDEFINED_ACCOUNTS));
-    }
+    checkAuth();
     
-    if (savedDrivers) {
-      setDrivers(JSON.parse(savedDrivers));
-    } else {
-      setDrivers(DRIVER_ACCOUNTS);
-      localStorage.setItem("drivers", JSON.stringify(DRIVER_ACCOUNTS));
-    }
+    // Set up auth state change listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (event === 'SIGNED_IN' && session) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', session.user.id)
+            .single();
+          
+          if (profile) {
+            setUser({
+              id: profile.id,
+              name: profile.name,
+              email: profile.email || '',
+              role: profile.role as UserRole,
+              phone: profile.phone,
+              gender: profile.gender,
+              profileImage: profile.photo_url,
+              vehicleNumber: profile.vehicle_number,
+              available: profile.available,
+              location: profile.current_location,
+              onSchedule: profile.on_schedule,
+            });
+            setIsAuthenticated(true);
+          }
+        } else if (event === 'SIGNED_OUT') {
+          setUser(null);
+          setIsAuthenticated(false);
+        }
+      }
+    );
     
-    // Check for an existing session
-    const savedUser = localStorage.getItem("currentUser");
-    if (savedUser) {
-      setUser(JSON.parse(savedUser));
-      setIsAuthenticated(true);
-    }
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   // Login function
   const login = async (email: string, password: string): Promise<boolean> => {
-    // Find the user in our "database"
-    const foundUser = users.find(
-      (u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password
-    );
-
-    if (foundUser) {
-      // Create a clean user object without the password
-      const { password: _, ...cleanUserData } = foundUser;
+    try {
+      // Try Supabase authentication first
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
       
-      // Set the authenticated user
-      setUser(cleanUserData);
-      setIsAuthenticated(true);
+      if (error) {
+        // Fall back to local storage for backwards compatibility
+        // Find the user in our "database"
+        const foundUser = PREDEFINED_ACCOUNTS.find(
+          (u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password
+        );
+    
+        if (foundUser) {
+          try {
+            // Try to sign up the user with Supabase
+            const { data, error } = await supabase.auth.signUp({
+              email,
+              password,
+              options: {
+                data: {
+                  name: foundUser.name,
+                  role: foundUser.role,
+                  phone: foundUser.phone,
+                },
+              },
+            });
+            
+            if (error) throw error;
+            
+            if (data.user) {
+              // Update the profile with additional data
+              const { error: updateError } = await supabase
+                .from('profiles')
+                .update({
+                  vehicle_number: foundUser.vehicleNumber,
+                  available: foundUser.available,
+                  current_location: foundUser.location,
+                  on_schedule: foundUser.onSchedule,
+                })
+                .eq('id', data.user.id);
+              
+              if (updateError) {
+                console.error("Error updating profile:", updateError);
+              }
+              
+              // Wait for the profile to be ready
+              const checkProfileInterval = setInterval(async () => {
+                const { data: profile } = await supabase
+                  .from('profiles')
+                  .select('*')
+                  .eq('id', data.user!.id)
+                  .single();
+                
+                if (profile) {
+                  clearInterval(checkProfileInterval);
+                  
+                  // Set the authenticated user
+                  setUser({
+                    id: profile.id,
+                    name: profile.name,
+                    email: profile.email || '',
+                    role: profile.role as UserRole,
+                    phone: profile.phone,
+                    gender: profile.gender,
+                    profileImage: profile.photo_url,
+                    vehicleNumber: profile.vehicle_number,
+                    available: profile.available,
+                    location: profile.current_location,
+                    onSchedule: profile.on_schedule,
+                  });
+                  setIsAuthenticated(true);
+                }
+              }, 1000);
+              
+              setTimeout(() => {
+                clearInterval(checkProfileInterval);
+              }, 10000); // Timeout after 10 seconds
+            }
+            
+            toast.success("Account created and logged in!");
+            return true;
+          } catch (signupError) {
+            console.error("Error signing up:", signupError);
+            toast.error("Error creating account in Supabase");
+            return false;
+          }
+        } else {
+          toast.error("Invalid email or password");
+          return false;
+        }
+      }
       
-      // Save to localStorage for persistence
-      localStorage.setItem("currentUser", JSON.stringify(cleanUserData));
-      
-      toast.success("Login successful!");
       return true;
-    } else {
-      toast.error("Invalid email or password");
+    } catch (error) {
+      console.error("Login error:", error);
+      toast.error("Error during login");
       return false;
     }
   };
 
   // Logout function
-  const logout = () => {
+  const logout = async () => {
+    await supabase.auth.signOut();
     setUser(null);
     setIsAuthenticated(false);
-    localStorage.removeItem("currentUser");
     toast.info("You have been logged out");
   };
 
   // Register function (for new users only)
   const register = async (userData: any, password: string): Promise<boolean> => {
-    // Check if email already exists
-    if (users.some((u) => u.email.toLowerCase() === userData.email.toLowerCase())) {
-      toast.error("Email already registered");
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email: userData.email,
+        password,
+        options: {
+          data: {
+            name: userData.name,
+            role: userData.role,
+            gender: userData.gender,
+            phone: userData.phone,
+          },
+        },
+      });
+      
+      if (error) throw error;
+      
+      toast.success("Registration successful! Please check your email for verification.");
+      return true;
+    } catch (error) {
+      console.error("Registration error:", error);
+      toast.error((error as Error).message || "Registration failed. Please try again.");
       return false;
     }
-
-    // Create a new user with a unique ID
-    const newUser = {
-      id: `user-${Date.now()}`,
-      ...userData,
-      role: "user" as UserRole,
-      password,
-    };
-
-    // Add to our "database"
-    const updatedUsers = [...users, newUser];
-    setUsers(updatedUsers);
-    
-    // Save to localStorage
-    localStorage.setItem("users", JSON.stringify(updatedUsers));
-
-    toast.success("Registration successful! Please log in.");
-    return true;
   };
 
   // Update driver profile
-  const updateDriverProfile = (driverId: string, data: Partial<UserData>) => {
-    // Update both users and drivers arrays
-    const updatedUsers = users.map(user => 
-      user.id === driverId ? { ...user, ...data } : user
-    );
-    
-    const updatedDrivers = drivers.map(driver => 
-      driver.id === driverId ? { ...driver, ...data } : driver
-    );
-    
-    setUsers(updatedUsers);
-    setDrivers(updatedDrivers);
-    
-    // If the current user is the one being updated, update that too
-    if (user && user.id === driverId) {
-      const updatedUser = { ...user, ...data };
-      setUser(updatedUser);
-      localStorage.setItem("currentUser", JSON.stringify(updatedUser));
+  const updateDriverProfile = async (driverId: string, data: Partial<UserData>) => {
+    try {
+      // Map from our interface to the database structure
+      const profileData: any = {};
+      
+      if (data.name) profileData.name = data.name;
+      if (data.phone) profileData.phone = data.phone;
+      if (data.gender) profileData.gender = data.gender;
+      if (data.profileImage) profileData.photo_url = data.profileImage;
+      if (data.vehicleNumber) profileData.vehicle_number = data.vehicleNumber;
+      if (data.available !== undefined) profileData.available = data.available;
+      if (data.location) profileData.current_location = data.location;
+      if (data.onSchedule !== undefined) profileData.on_schedule = data.onSchedule;
+      
+      const { error } = await supabase
+        .from('profiles')
+        .update(profileData)
+        .eq('id', driverId);
+      
+      if (error) throw error;
+      
+      // If the current user is the one being updated, update that too
+      if (user && user.id === driverId) {
+        const updatedUser = { ...user, ...data };
+        setUser(updatedUser);
+      }
+      
+      toast.success("Profile updated successfully");
+    } catch (error) {
+      console.error("Error updating profile:", error);
+      toast.error("Failed to update profile");
     }
-    
-    // Save to localStorage
-    localStorage.setItem("users", JSON.stringify(updatedUsers));
-    localStorage.setItem("drivers", JSON.stringify(updatedDrivers));
-    
-    toast.success("Profile updated successfully");
   };
 
   // Update driver availability
@@ -231,19 +360,118 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // Get all drivers
-  const getDrivers = () => {
-    return drivers;
+  const getDrivers = async (): Promise<UserData[]> => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('role', 'driver');
+      
+      if (error) throw error;
+      
+      return data.map(profile => ({
+        id: profile.id,
+        name: profile.name,
+        email: profile.email || '',
+        role: profile.role as UserRole,
+        phone: profile.phone,
+        gender: profile.gender,
+        profileImage: profile.photo_url,
+        vehicleNumber: profile.vehicle_number,
+        available: profile.available,
+        location: profile.current_location,
+        onSchedule: profile.on_schedule,
+      }));
+    } catch (error) {
+      console.error("Error fetching drivers:", error);
+      return [];
+    }
   };
 
   // Get only available drivers
-  const getAvailableDrivers = () => {
-    return drivers.filter(driver => driver.available === true && !driver.onSchedule);
+  const getAvailableDrivers = async (): Promise<UserData[]> => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('role', 'driver')
+        .eq('available', true)
+        .is('on_schedule', null);
+      
+      if (error) throw error;
+      
+      return data.map(profile => ({
+        id: profile.id,
+        name: profile.name,
+        email: profile.email || '',
+        role: profile.role as UserRole,
+        phone: profile.phone,
+        gender: profile.gender,
+        profileImage: profile.photo_url,
+        vehicleNumber: profile.vehicle_number,
+        available: profile.available,
+        location: profile.current_location,
+        onSchedule: profile.on_schedule,
+      }));
+    } catch (error) {
+      console.error("Error fetching available drivers:", error);
+      return [];
+    }
   };
 
   // Get user by ID
-  const getUserById = (id: string) => {
-    return [...drivers, ...users.map(({ password: _, ...user }) => user)]
-      .find(user => user.id === id);
+  const getUserById = async (id: string): Promise<UserData | undefined> => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', id)
+        .single();
+      
+      if (error) throw error;
+      
+      return {
+        id: data.id,
+        name: data.name,
+        email: data.email || '',
+        role: data.role as UserRole,
+        phone: data.phone,
+        gender: data.gender,
+        profileImage: data.photo_url,
+        vehicleNumber: data.vehicle_number,
+        available: data.available,
+        location: data.current_location,
+        onSchedule: data.on_schedule,
+      };
+    } catch (error) {
+      console.error("Error fetching user by ID:", error);
+      return undefined;
+    }
+  };
+
+  // Migration function to transfer predefined accounts to Supabase
+  const migrateMockDataToSupabase = async (): Promise<{ success: boolean, message: string }> => {
+    try {
+      const { data, error } = await supabase.functions.invoke('migrate-mock-data', {
+        body: { mockData: PREDEFINED_ACCOUNTS }
+      });
+      
+      if (error) {
+        console.error("Migration error:", error);
+        return { success: false, message: error.message };
+      }
+      
+      return { 
+        success: true, 
+        message: `Successfully migrated ${data.migrated} users to Supabase` 
+      };
+    } catch (error) {
+      console.error("Migration function error:", error);
+      return { 
+        success: false, 
+        message: (error as Error).message || "Migration failed. Please try again." 
+      };
+    }
   };
 
   return (
@@ -260,7 +488,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updateDriverLocation,
         getDrivers,
         getAvailableDrivers,
-        getUserById
+        getUserById,
+        migrateMockDataToSupabase
       }}
     >
       {children}
