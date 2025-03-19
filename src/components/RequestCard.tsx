@@ -1,5 +1,5 @@
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { RequestData } from "@/context/RequestContext";
 import { useAuth } from "@/context/AuthContext";
@@ -15,6 +15,27 @@ interface RequestCardProps {
 const RequestCard: React.FC<RequestCardProps> = ({ request, role }) => {
   const navigate = useNavigate();
   const { getUserById } = useAuth();
+  const [driverData, setDriverData] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  
+  // Fetch driver data if assigned
+  useEffect(() => {
+    const fetchDriverData = async () => {
+      if (request.driverId) {
+        setLoading(true);
+        try {
+          const data = await getUserById(request.driverId);
+          setDriverData(data);
+        } catch (error) {
+          console.error("Error fetching driver data:", error);
+        } finally {
+          setLoading(false);
+        }
+      }
+    };
+    
+    fetchDriverData();
+  }, [request.driverId, getUserById]);
   
   // Format timestamp for display
   const formatDate = (date: Date) => {
@@ -26,9 +47,6 @@ const RequestCard: React.FC<RequestCardProps> = ({ request, role }) => {
       minute: '2-digit'
     });
   };
-  
-  // Get driver data if assigned
-  const driverData = request.driverId ? getUserById(request.driverId) : null;
   
   // Generate status badge
   const getStatusBadge = () => {

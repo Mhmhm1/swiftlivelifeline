@@ -94,6 +94,23 @@ const AuthContext = createContext<AuthContextType>({
   migrateMockDataToSupabase: async () => ({ success: false, message: "Not implemented" }),
 });
 
+// Helper function to map Supabase profile to UserData
+const mapProfileToUserData = (profile: any): UserData => {
+  return {
+    id: profile.id,
+    name: profile.name,
+    email: profile.email || '',
+    role: profile.role as UserRole,
+    phone: profile.phone,
+    gender: profile.status, // Using status field for gender temporarily
+    profileImage: profile.photo_url,
+    vehicleNumber: profile.license_number, // Using license_number for vehicle_number
+    available: profile.status === 'available', // Using status field to derive available
+    location: profile.current_location,
+    onSchedule: profile.current_job !== null, // If there's a current job, they're on schedule
+  };
+};
+
 // Create a provider component
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
@@ -112,19 +129,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           .single();
         
         if (profile) {
-          setUser({
-            id: profile.id,
-            name: profile.name,
-            email: profile.email || '',
-            role: profile.role as UserRole,
-            phone: profile.phone,
-            gender: profile.gender,
-            profileImage: profile.photo_url,
-            vehicleNumber: profile.vehicle_number,
-            available: profile.available,
-            location: profile.current_location,
-            onSchedule: profile.on_schedule,
-          });
+          setUser(mapProfileToUserData(profile));
           setIsAuthenticated(true);
         }
       }
@@ -143,19 +148,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             .single();
           
           if (profile) {
-            setUser({
-              id: profile.id,
-              name: profile.name,
-              email: profile.email || '',
-              role: profile.role as UserRole,
-              phone: profile.phone,
-              gender: profile.gender,
-              profileImage: profile.photo_url,
-              vehicleNumber: profile.vehicle_number,
-              available: profile.available,
-              location: profile.current_location,
-              onSchedule: profile.on_schedule,
-            });
+            setUser(mapProfileToUserData(profile));
             setIsAuthenticated(true);
           }
         } else if (event === 'SIGNED_OUT') {
@@ -208,10 +201,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               const { error: updateError } = await supabase
                 .from('profiles')
                 .update({
-                  vehicle_number: foundUser.vehicleNumber,
-                  available: foundUser.available,
+                  license_number: foundUser.vehicleNumber,
+                  status: foundUser.available ? 'available' : 'unavailable',
                   current_location: foundUser.location,
-                  on_schedule: foundUser.onSchedule,
+                  current_job: foundUser.onSchedule ? 'active' : null,
                 })
                 .eq('id', data.user.id);
               
@@ -231,19 +224,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   clearInterval(checkProfileInterval);
                   
                   // Set the authenticated user
-                  setUser({
-                    id: profile.id,
-                    name: profile.name,
-                    email: profile.email || '',
-                    role: profile.role as UserRole,
-                    phone: profile.phone,
-                    gender: profile.gender,
-                    profileImage: profile.photo_url,
-                    vehicleNumber: profile.vehicle_number,
-                    available: profile.available,
-                    location: profile.current_location,
-                    onSchedule: profile.on_schedule,
-                  });
+                  setUser(mapProfileToUserData(profile));
                   setIsAuthenticated(true);
                 }
               }, 1000);
@@ -292,7 +273,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           data: {
             name: userData.name,
             role: userData.role,
-            gender: userData.gender,
+            status: userData.gender, // Using status for gender
             phone: userData.phone,
           },
         },
@@ -317,12 +298,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       if (data.name) profileData.name = data.name;
       if (data.phone) profileData.phone = data.phone;
-      if (data.gender) profileData.gender = data.gender;
+      if (data.gender) profileData.status = data.gender; // Using status for gender
       if (data.profileImage) profileData.photo_url = data.profileImage;
-      if (data.vehicleNumber) profileData.vehicle_number = data.vehicleNumber;
-      if (data.available !== undefined) profileData.available = data.available;
+      if (data.vehicleNumber) profileData.license_number = data.vehicleNumber; // Using license_number for vehicle
+      if (data.available !== undefined) profileData.status = data.available ? 'available' : 'unavailable';
       if (data.location) profileData.current_location = data.location;
-      if (data.onSchedule !== undefined) profileData.on_schedule = data.onSchedule;
+      if (data.onSchedule !== undefined) profileData.current_job = data.onSchedule ? 'active' : null;
       
       const { error } = await supabase
         .from('profiles')
@@ -369,19 +350,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       if (error) throw error;
       
-      return data.map(profile => ({
-        id: profile.id,
-        name: profile.name,
-        email: profile.email || '',
-        role: profile.role as UserRole,
-        phone: profile.phone,
-        gender: profile.gender,
-        profileImage: profile.photo_url,
-        vehicleNumber: profile.vehicle_number,
-        available: profile.available,
-        location: profile.current_location,
-        onSchedule: profile.on_schedule,
-      }));
+      return data.map(mapProfileToUserData);
     } catch (error) {
       console.error("Error fetching drivers:", error);
       return [];
@@ -395,24 +364,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .from('profiles')
         .select('*')
         .eq('role', 'driver')
-        .eq('available', true)
-        .is('on_schedule', null);
+        .eq('status', 'available')
+        .is('current_job', null);
       
       if (error) throw error;
       
-      return data.map(profile => ({
-        id: profile.id,
-        name: profile.name,
-        email: profile.email || '',
-        role: profile.role as UserRole,
-        phone: profile.phone,
-        gender: profile.gender,
-        profileImage: profile.photo_url,
-        vehicleNumber: profile.vehicle_number,
-        available: profile.available,
-        location: profile.current_location,
-        onSchedule: profile.on_schedule,
-      }));
+      return data.map(mapProfileToUserData);
     } catch (error) {
       console.error("Error fetching available drivers:", error);
       return [];
@@ -430,19 +387,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       if (error) throw error;
       
-      return {
-        id: data.id,
-        name: data.name,
-        email: data.email || '',
-        role: data.role as UserRole,
-        phone: data.phone,
-        gender: data.gender,
-        profileImage: data.photo_url,
-        vehicleNumber: data.vehicle_number,
-        available: data.available,
-        location: data.current_location,
-        onSchedule: data.on_schedule,
-      };
+      return mapProfileToUserData(data);
     } catch (error) {
       console.error("Error fetching user by ID:", error);
       return undefined;

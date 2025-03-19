@@ -1,242 +1,145 @@
 
-import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useState, useEffect } from "react";
 import Layout from "@/components/Layout";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/context/AuthContext";
-import { useRequest } from "@/context/RequestContext";
-import { Check, Search, Users, UserX, UserCheck, Star, Car, Phone, MapPin } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { MapPin, Search, Check, X, UserPlus } from "lucide-react";
 
-const AdminDrivers: React.FC = () => {
-  const navigate = useNavigate();
+const AdminDrivers = () => {
   const { getDrivers } = useAuth();
-  const { requests } = useRequest();
-  const [searchQuery, setSearchQuery] = useState("");
-  
-  const allDrivers = getDrivers();
-  
-  // Filter drivers based on search query
-  const filteredDrivers = allDrivers.filter(
-    (driver) =>
-      driver.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (driver.vehicleNumber && driver.vehicleNumber.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (driver.location && driver.location.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
-  
-  // Categorize filtered drivers by availability
-  const availableDrivers = filteredDrivers.filter(driver => driver.available && !driver.onSchedule);
-  const busyDrivers = filteredDrivers.filter(driver => !driver.available || driver.onSchedule);
-  
-  // Calculate driver statistics
-  const getDriverStats = (driverId: string) => {
-    const driverRequests = requests.filter(req => req.driverId === driverId);
-    const completedRequests = driverRequests.filter(req => req.status === "completed");
-    const ratedRequests = completedRequests.filter(req => req.rating !== undefined);
-    
-    const averageRating = ratedRequests.length > 0
-      ? ratedRequests.reduce((sum, req) => sum + (req.rating || 0), 0) / ratedRequests.length
-      : 0;
-    
-    return {
-      totalJobs: driverRequests.length,
-      completedJobs: completedRequests.length,
-      averageRating: averageRating
+  const [drivers, setDrivers] = useState<any[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [activeTab, setActiveTab] = useState("all");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchDrivers = async () => {
+      setLoading(true);
+      try {
+        const driversData = await getDrivers();
+        setDrivers(driversData);
+      } catch (error) {
+        console.error("Error fetching drivers:", error);
+      } finally {
+        setLoading(false);
+      }
     };
-  };
-  
-  // Driver card component
-  const DriverCard = ({ driver }: { driver: any }) => {
-    const stats = getDriverStats(driver.id);
+
+    fetchDrivers();
+  }, [getDrivers]);
+
+  const filteredDrivers = drivers.filter(driver => {
+    const matchesSearch = driver.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          driver.vehicleNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          driver.location?.toLowerCase().includes(searchTerm.toLowerCase());
     
-    return (
-      <Card className="overflow-hidden transition-all hover:shadow-md">
-        <CardContent className="p-0">
-          <div className="p-4">
-            <div className="flex items-start justify-between">
-              <div className="flex items-center">
-                <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-200 mr-3 flex items-center justify-center">
-                  {driver.profileImage ? (
-                    <img 
-                      src={driver.profileImage} 
-                      alt={driver.name} 
-                      className="w-10 h-10 object-cover"
-                    />
-                  ) : (
-                    <span className="font-medium text-gray-600">{driver.name.charAt(0)}</span>
-                  )}
-                </div>
-                <div>
-                  <h3 className="font-medium text-gray-900">{driver.name}</h3>
-                  <p className="text-sm text-gray-500">{driver.email}</p>
-                </div>
-              </div>
-              <Badge 
-                variant={driver.available && !driver.onSchedule ? "default" : "secondary"}
-                className={driver.available && !driver.onSchedule ? "bg-green-100 text-green-800 hover:bg-green-100" : "bg-gray-100 text-gray-800 hover:bg-gray-100"}
-              >
-                {driver.available && !driver.onSchedule ? "Available" : "Unavailable"}
-              </Badge>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-2 mt-4">
-              {driver.vehicleNumber && (
-                <div className="flex items-center text-sm text-gray-700">
-                  <Car className="h-4 w-4 mr-1 text-gray-500" />
-                  {driver.vehicleNumber}
-                </div>
-              )}
-              
-              {driver.phone && (
-                <div className="flex items-center text-sm text-gray-700">
-                  <Phone className="h-4 w-4 mr-1 text-gray-500" />
-                  {driver.phone}
-                </div>
-              )}
-              
-              {driver.location && (
-                <div className="flex items-center text-sm text-gray-700 col-span-2">
-                  <MapPin className="h-4 w-4 mr-1 text-gray-500" />
-                  {driver.location}
-                </div>
-              )}
-            </div>
-            
-            <div className="border-t mt-4 pt-4">
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <div>
-                  <p className="text-sm font-medium text-gray-500">Jobs</p>
-                  <p className="text-lg font-semibold">{stats.totalJobs}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-500">Completed</p>
-                  <p className="text-lg font-semibold">{stats.completedJobs}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-500">Rating</p>
-                  <div className="flex items-center justify-center">
-                    <Star className="h-4 w-4 text-yellow-500 mr-1" />
-                    <p className="text-lg font-semibold">
-                      {stats.averageRating > 0 ? stats.averageRating.toFixed(1) : "-"}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  };
-  
+    if (activeTab === "all") return matchesSearch;
+    if (activeTab === "available") return matchesSearch && driver.available;
+    if (activeTab === "unavailable") return matchesSearch && !driver.available;
+    return matchesSearch;
+  });
+
   return (
     <Layout>
-      <div className="space-y-6 animate-fade-in">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center">
+      <div className="container p-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Manage Drivers</h1>
-            <p className="text-muted-foreground">
-              View and manage all system drivers
-            </p>
+            <h1 className="text-2xl font-bold tracking-tight">Drivers</h1>
+            <p className="text-muted-foreground">Manage and view all drivers in the system</p>
           </div>
-          <Button 
-            variant="outline" 
-            onClick={() => navigate("/admin/dashboard")}
-            className="mt-4 md:mt-0"
-          >
-            Back to Dashboard
+          <Button className="mt-2 sm:mt-0" onClick={() => console.log("Add driver")}>
+            <UserPlus className="mr-2 h-4 w-4" />
+            Add New Driver
           </Button>
         </div>
-        
-        <div className="flex items-center">
-          <div className="relative flex-1">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
-            <Input
-              type="search"
-              placeholder="Search drivers by name, vehicle number, or location..."
-              className="pl-8"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
-        </div>
-        
-        <Tabs defaultValue="all" className="space-y-4">
-          <TabsList className="grid grid-cols-3 sm:w-[400px]">
-            <TabsTrigger value="all" className="flex items-center">
-              <Users className="mr-1 h-4 w-4" /> All
-            </TabsTrigger>
-            <TabsTrigger value="available" className="flex items-center">
-              <UserCheck className="mr-1 h-4 w-4" /> Available
-            </TabsTrigger>
-            <TabsTrigger value="busy" className="flex items-center">
-              <UserX className="mr-1 h-4 w-4" /> Busy
-            </TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="all">
-            {filteredDrivers.length === 0 ? (
-              <div className="text-center py-8 bg-white rounded-lg border">
-                <Search className="mx-auto h-12 w-12 text-gray-400" />
-                <h3 className="mt-2 text-lg font-medium">No drivers found</h3>
-                <p className="mt-1 text-gray-500">
-                  {searchQuery 
-                    ? `No drivers match your search for "${searchQuery}"`
-                    : "There are no drivers in the system yet."}
-                </p>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle>Driver Directory</CardTitle>
+            <div className="flex flex-col sm:flex-row justify-between space-y-2 sm:space-y-0 sm:space-x-2">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="search"
+                  placeholder="Search drivers..."
+                  className="pl-8 w-full sm:w-[300px]"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
               </div>
-            ) : (
+              <Tabs defaultValue="all" className="w-full sm:w-auto" onValueChange={setActiveTab}>
+                <TabsList>
+                  <TabsTrigger value="all">All</TabsTrigger>
+                  <TabsTrigger value="available">Available</TabsTrigger>
+                  <TabsTrigger value="unavailable">Unavailable</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <div className="flex justify-center py-10">
+                <div className="animate-spin h-8 w-8 border-t-2 border-b-2 border-gray-900 rounded-full"></div>
+              </div>
+            ) : filteredDrivers.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredDrivers.map(driver => (
-                  <DriverCard key={driver.id} driver={driver} />
+                {filteredDrivers.map((driver) => (
+                  <div key={driver.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
+                    <div className="flex justify-between">
+                      <div className="flex items-center space-x-3">
+                        <Avatar className="h-10 w-10">
+                          <AvatarImage src={driver.profileImage} />
+                          <AvatarFallback>{driver.name.substring(0, 2).toUpperCase()}</AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <h3 className="font-medium">{driver.name}</h3>
+                          <p className="text-sm text-muted-foreground">{driver.email}</p>
+                        </div>
+                      </div>
+                      <Badge variant={driver.available ? "outline" : "secondary"}>
+                        {driver.available ? 
+                          <><Check className="mr-1 h-3 w-3" /> Available</> : 
+                          <><X className="mr-1 h-3 w-3" /> Unavailable</>
+                        }
+                      </Badge>
+                    </div>
+                    
+                    <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Vehicle</Label>
+                        <p>{driver.vehicleNumber || "Not assigned"}</p>
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Phone</Label>
+                        <p>{driver.phone || "Not provided"}</p>
+                      </div>
+                      <div className="col-span-2">
+                        <Label className="text-xs text-muted-foreground flex items-center">
+                          <MapPin className="mr-1 h-3 w-3" /> Location
+                        </Label>
+                        <p>{driver.location || "Not specified"}</p>
+                      </div>
+                    </div>
+                    
+                    <div className="mt-4 flex justify-end">
+                      <Button variant="outline" size="sm">View Details</Button>
+                    </div>
+                  </div>
                 ))}
               </div>
-            )}
-          </TabsContent>
-          
-          <TabsContent value="available">
-            {availableDrivers.length === 0 ? (
-              <div className="text-center py-8 bg-white rounded-lg border">
-                <UserCheck className="mx-auto h-12 w-12 text-gray-400" />
-                <h3 className="mt-2 text-lg font-medium">No available drivers</h3>
-                <p className="mt-1 text-gray-500">
-                  {searchQuery 
-                    ? `No available drivers match your search for "${searchQuery}"`
-                    : "There are no available drivers at the moment."}
-                </p>
-              </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {availableDrivers.map(driver => (
-                  <DriverCard key={driver.id} driver={driver} />
-                ))}
+              <div className="text-center py-10">
+                <p className="text-muted-foreground">No drivers found matching your criteria</p>
               </div>
             )}
-          </TabsContent>
-          
-          <TabsContent value="busy">
-            {busyDrivers.length === 0 ? (
-              <div className="text-center py-8 bg-white rounded-lg border">
-                <UserX className="mx-auto h-12 w-12 text-gray-400" />
-                <h3 className="mt-2 text-lg font-medium">No busy drivers</h3>
-                <p className="mt-1 text-gray-500">
-                  {searchQuery 
-                    ? `No busy drivers match your search for "${searchQuery}"`
-                    : "There are no busy drivers at the moment."}
-                </p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {busyDrivers.map(driver => (
-                  <DriverCard key={driver.id} driver={driver} />
-                ))}
-              </div>
-            )}
-          </TabsContent>
-        </Tabs>
+          </CardContent>
+        </Card>
       </div>
     </Layout>
   );

@@ -1,5 +1,5 @@
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useRequest } from "@/context/RequestContext";
 import { Button } from "@/components/ui/button";
@@ -13,11 +13,31 @@ interface DriverSelectorProps {
 
 const DriverSelector: React.FC<DriverSelectorProps> = ({ requestId }) => {
   const [selectedDriverId, setSelectedDriverId] = useState<string>("");
+  const [availableDrivers, setAvailableDrivers] = useState<any[]>([]);
   const { getAvailableDrivers } = useAuth();
   const { assignDriver, getRequestById } = useRequest();
+  const [request, setRequest] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   
-  const request = getRequestById(requestId);
-  const availableDrivers = getAvailableDrivers();
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const requestData = getRequestById(requestId);
+        setRequest(requestData);
+        
+        const driversData = await getAvailableDrivers();
+        setAvailableDrivers(driversData || []);
+      } catch (error) {
+        console.error("Error fetching data:", error);
+        toast.error("Failed to load drivers data");
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchData();
+  }, [requestId, getAvailableDrivers, getRequestById]);
   
   const handleAssignDriver = () => {
     if (!selectedDriverId) {
@@ -28,6 +48,10 @@ const DriverSelector: React.FC<DriverSelectorProps> = ({ requestId }) => {
     assignDriver(requestId, selectedDriverId);
     setSelectedDriverId("");
   };
+  
+  if (loading) {
+    return <div className="p-4">Loading driver data...</div>;
+  }
   
   if (!request) {
     return <div>Request not found</div>;

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
@@ -15,6 +16,7 @@ const AdminDashboard: React.FC = () => {
   const { user, getDrivers, logout } = useAuth();
   const navigate = useNavigate();
   const [drivers, setDrivers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     totalDrivers: 0,
     availableDrivers: 0,
@@ -38,6 +40,7 @@ const AdminDashboard: React.FC = () => {
     }
 
     const fetchData = async () => {
+      setLoading(true);
       try {
         // Fetch drivers
         const driversData = await getDrivers();
@@ -55,6 +58,8 @@ const AdminDashboard: React.FC = () => {
       } catch (error) {
         console.error("Error fetching dashboard data:", error);
         toast.error("Failed to load dashboard data");
+      } finally {
+        setLoading(false);
       }
     };
 
@@ -68,6 +73,18 @@ const AdminDashboard: React.FC = () => {
 
   if (!user || user.role !== "admin") {
     return null;
+  }
+
+  if (loading) {
+    return (
+      <AdminLayout>
+        <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
+          <div className="flex justify-center py-10">
+            <div className="animate-spin h-8 w-8 border-t-2 border-b-2 border-gray-900 rounded-full"></div>
+          </div>
+        </div>
+      </AdminLayout>
+    );
   }
 
   return (
@@ -256,76 +273,6 @@ const AdminDashboard: React.FC = () => {
             </Card>
           </TabsContent>
         </Tabs>
-      </div>
-      
-      <div className="hidden md:block border-r bg-gray-50/40 dark:bg-gray-800/40 w-[250px] h-screen">
-        <div className="flex flex-col h-full">
-          <div className="flex h-14 items-center border-b px-4">
-            <Link to="/admin/dashboard" className="flex items-center gap-2 font-semibold">
-              <Ambulance className="h-6 w-6 text-medical" />
-              <span>SwiftAid Admin</span>
-            </Link>
-          </div>
-          <div className="flex-1 overflow-auto py-2">
-            <nav className="grid items-start px-2 text-sm font-medium">
-              <Link
-                to="/admin/dashboard"
-                className="flex items-center gap-2 rounded-md bg-gray-100 px-3 py-2 text-gray-900 dark:bg-gray-800 dark:text-gray-50 transition-all"
-              >
-                <BarChart3 className="h-5 w-5" />
-                <span>Dashboard</span>
-              </Link>
-              <Link
-                to="/admin/requests"
-                className="flex items-center gap-2 rounded-md px-3 py-2 hover:bg-muted"
-              >
-                <Ambulance className="h-5 w-5" />
-                <span>Requests</span>
-              </Link>
-              <Link
-                to="/admin/drivers"
-                className="flex items-center gap-2 rounded-md px-3 py-2 hover:bg-muted"
-              >
-                <Users className="h-5 w-5" />
-                <span>Drivers</span>
-              </Link>
-              <Link
-                to="/admin/migrate"
-                className="flex items-center gap-2 rounded-md px-3 py-2 hover:bg-muted"
-              >
-                <Database className="h-5 w-5" />
-                <span>Migrate Data</span>
-              </Link>
-              <Link
-                to="/admin/settings"
-                className="flex items-center gap-2 rounded-md px-3 py-2 hover:bg-muted"
-              >
-                <Settings className="h-5 w-5" />
-                <span>Settings</span>
-              </Link>
-            </nav>
-          </div>
-          <div className="mt-auto p-4">
-            <div className="flex items-center gap-2 rounded-md px-3 py-2">
-              <Avatar className="h-9 w-9">
-                <AvatarImage src={user?.profileImage} alt={user?.name} />
-                <AvatarFallback>{user?.name?.substring(0, 2).toUpperCase()}</AvatarFallback>
-              </Avatar>
-              <div className="grid gap-0.5 text-xs">
-                <div className="font-medium">{user?.name}</div>
-                <div className="text-gray-500 dark:text-gray-400">{user?.email}</div>
-              </div>
-            </div>
-            <Button
-              variant="outline"
-              className="mt-2 w-full justify-start gap-2"
-              onClick={handleLogout}
-            >
-              <LogOut className="h-4 w-4" />
-              Log out
-            </Button>
-          </div>
-        </div>
       </div>
     </AdminLayout>
   );

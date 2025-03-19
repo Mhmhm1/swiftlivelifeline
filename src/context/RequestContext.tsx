@@ -37,7 +37,7 @@ interface RequestContextType {
   getDriverRequests: (driverId: string) => RequestData[];
   getRequestById: (requestId: string) => RequestData | undefined;
   sendMessage: (requestId: string, senderId: string, text: string) => void;
-  getUserById: (userId: string) => UserData | undefined;
+  getUserById: (userId: string) => Promise<UserData | undefined>;
 }
 
 const RequestContext = createContext<RequestContextType>({
@@ -51,7 +51,7 @@ const RequestContext = createContext<RequestContextType>({
   getDriverRequests: () => [],
   getRequestById: () => undefined,
   sendMessage: () => {},
-  getUserById: () => undefined,
+  getUserById: async () => undefined,
 });
 
 export const RequestProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -100,22 +100,27 @@ export const RequestProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return id;
   };
 
-  const assignDriver = (requestId: string, driverId: string) => {
-    const driverData = getUserById(driverId);
-    if (!driverData) {
-      toast.error("Driver not found");
-      return;
-    }
+  const assignDriver = async (requestId: string, driverId: string) => {
+    try {
+      const driverData = await getUserById(driverId);
+      if (!driverData) {
+        toast.error("Driver not found");
+        return;
+      }
 
-    setRequests(prev => 
-      prev.map(req => 
-        req.id === requestId 
-          ? { ...req, driverId, status: "assigned" } 
-          : req
-      )
-    );
-    
-    toast.success(`Request assigned to ${driverData.name}`);
+      setRequests(prev => 
+        prev.map(req => 
+          req.id === requestId 
+            ? { ...req, driverId, status: "assigned" } 
+            : req
+        )
+      );
+      
+      toast.success(`Request assigned to ${driverData.name}`);
+    } catch (error) {
+      console.error("Error assigning driver:", error);
+      toast.error("Failed to assign driver");
+    }
   };
 
   const startJob = (requestId: string) => {
