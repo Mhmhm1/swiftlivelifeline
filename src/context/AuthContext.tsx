@@ -198,14 +198,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             
             if (data.user) {
               // Update the profile with additional data
+              const profileData: any = {
+                license_number: (foundUser as any).vehicleNumber || null,
+                status: (foundUser as any).available ? 'available' : 'unavailable',
+                current_location: (foundUser as any).location || null,
+                current_job: (foundUser as any).onSchedule ? 'active' : null,
+              };
+              
               const { error: updateError } = await supabase
                 .from('profiles')
-                .update({
-                  license_number: foundUser.vehicleNumber,
-                  status: foundUser.available ? 'available' : 'unavailable',
-                  current_location: foundUser.location,
-                  current_job: foundUser.onSchedule ? 'active' : null,
-                })
+                .update(profileData)
                 .eq('id', data.user.id);
               
               if (updateError) {

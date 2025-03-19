@@ -12,6 +12,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useRequest } from "@/context/RequestContext";
 import { toast } from "sonner";
 import { AlertCircle, Ambulance, CheckCircle2, Clock, PhoneCall, MapPin, Info, MessageSquare } from "lucide-react";
+import { UserData } from "@/context/AuthContext";
 
 const RequestDetails: React.FC = () => {
   const { requestId } = useParams<{ requestId: string }>();
@@ -19,6 +20,8 @@ const RequestDetails: React.FC = () => {
   const { user } = useAuth();
   const { getRequestById, completeJob, getUserById } = useRequest();
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [driverData, setDriverData] = useState<UserData | null>(null);
+  const [loading, setLoading] = useState(true);
   
   useEffect(() => {
     // Refresh data every 10 seconds to check for changes
@@ -28,6 +31,30 @@ const RequestDetails: React.FC = () => {
     
     return () => clearInterval(interval);
   }, []);
+  
+  // Fetch driver data when needed
+  useEffect(() => {
+    const fetchDriverData = async () => {
+      if (!requestId) return;
+      
+      const request = getRequestById(requestId);
+      if (!request || !request.driverId) {
+        setLoading(false);
+        return;
+      }
+      
+      try {
+        const data = await getUserById(request.driverId);
+        setDriverData(data || null);
+      } catch (error) {
+        console.error("Error fetching driver data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchDriverData();
+  }, [requestId, getUserById, refreshTrigger]);
   
   if (!user || !requestId) {
     return <Layout>Invalid request</Layout>;
@@ -55,8 +82,6 @@ const RequestDetails: React.FC = () => {
       </Layout>
     );
   }
-  
-  const driverData = request.driverId ? getUserById(request.driverId) : null;
   
   const handleCompleteJob = () => {
     completeJob(requestId);

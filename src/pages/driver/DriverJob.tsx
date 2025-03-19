@@ -1,5 +1,5 @@
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Layout from "@/components/Layout";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,12 +11,36 @@ import { useAuth } from "@/context/AuthContext";
 import { useRequest } from "@/context/RequestContext";
 import { toast } from "sonner";
 import { AlertCircle, Ambulance, CheckCircle2, Clock, Phone, MapPin, Info, MessageSquare, User } from "lucide-react";
+import { UserData } from "@/context/AuthContext";
 
 const DriverJob: React.FC = () => {
   const { requestId } = useParams<{ requestId: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
   const { getRequestById, startJob, completeJob, getUserById } = useRequest();
+  const [userData, setUserData] = useState<UserData | null>(null);
+  const [loading, setLoading] = useState(true);
+  
+  // Get the request and user data
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!requestId || !user) return;
+      
+      try {
+        const request = getRequestById(requestId);
+        if (request && request.userId) {
+          const userDataResult = await getUserById(request.userId);
+          setUserData(userDataResult || null);
+        }
+      } catch (error) {
+        console.error("Error fetching user data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchData();
+  }, [requestId, user, getUserById]);
   
   if (!user || !requestId) {
     return <Layout>Invalid request</Layout>;
@@ -44,9 +68,6 @@ const DriverJob: React.FC = () => {
       </Layout>
     );
   }
-  
-  // Get user/patient data
-  const userData = getUserById(request.userId);
   
   const handleStartJob = () => {
     startJob(requestId);

@@ -29,7 +29,7 @@ export interface RequestData {
 interface RequestContextType {
   requests: RequestData[];
   createRequest: (requestData: Omit<RequestData, "id" | "status" | "timestamp" | "chatHistory">) => string;
-  assignDriver: (requestId: string, driverId: string) => void;
+  assignDriver: (requestId: string, driverId: string) => Promise<void>;
   startJob: (requestId: string) => void;
   completeJob: (requestId: string) => void;
   rateService: (requestId: string, rating: number, feedback: string) => void;
@@ -43,7 +43,7 @@ interface RequestContextType {
 const RequestContext = createContext<RequestContextType>({
   requests: [],
   createRequest: () => "",
-  assignDriver: () => {},
+  assignDriver: async () => {},
   startJob: () => {},
   completeJob: () => {},
   rateService: () => {},

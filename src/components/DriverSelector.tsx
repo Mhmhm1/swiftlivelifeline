@@ -39,13 +39,13 @@ const DriverSelector: React.FC<DriverSelectorProps> = ({ requestId }) => {
     fetchData();
   }, [requestId, getAvailableDrivers, getRequestById]);
   
-  const handleAssignDriver = () => {
+  const handleAssignDriver = async () => {
     if (!selectedDriverId) {
       toast.error("Please select a driver");
       return;
     }
     
-    assignDriver(requestId, selectedDriverId);
+    await assignDriver(requestId, selectedDriverId);
     setSelectedDriverId("");
   };
   
