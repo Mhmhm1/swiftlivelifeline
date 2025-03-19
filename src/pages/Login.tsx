@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
@@ -31,7 +32,14 @@ const Login: React.FC = () => {
     e.preventDefault();
     setLoading(true);
     try {
-      await login(email, password);
+      const success = await login(email, password);
+      if (!success) {
+        toast({
+          title: "Error signing in",
+          description: "Please check your credentials and try again.",
+          variant: "destructive",
+        });
+      }
       // Navigation will happen in useEffect above
     } catch (error) {
       toast({

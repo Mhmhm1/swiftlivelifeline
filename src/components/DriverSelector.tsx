@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
+import { UserData } from "@/context/AuthContext";
 
 interface DriverSelectorProps {
   requestId: string;
@@ -13,7 +14,7 @@ interface DriverSelectorProps {
 
 const DriverSelector: React.FC<DriverSelectorProps> = ({ requestId }) => {
   const [selectedDriverId, setSelectedDriverId] = useState<string>("");
-  const [availableDrivers, setAvailableDrivers] = useState<any[]>([]);
+  const [availableDrivers, setAvailableDrivers] = useState<UserData[]>([]);
   const { getAvailableDrivers } = useAuth();
   const { assignDriver, getRequestById } = useRequest();
   const [request, setRequest] = useState<any>(null);
