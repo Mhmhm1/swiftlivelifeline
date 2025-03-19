@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Ambulance, Mail, Lock } from "lucide-react";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState("");
@@ -31,22 +31,18 @@ const Login: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    
     try {
+      console.log("Attempting login with:", email, password);
       const success = await login(email, password);
+      
       if (!success) {
-        toast({
-          title: "Error signing in",
-          description: "Please check your credentials and try again.",
-          variant: "destructive",
-        });
+        toast.error("Invalid login credentials. Please check your email and password.");
       }
       // Navigation will happen in useEffect above
     } catch (error) {
-      toast({
-        title: "Error signing in",
-        description: (error as Error).message || "Please check your credentials and try again.",
-        variant: "destructive",
-      });
+      console.error("Login error:", error);
+      toast.error((error as Error).message || "Login failed. Please try again.");
     } finally {
       setLoading(false);
     }

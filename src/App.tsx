@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/context/AuthContext";
 import { RequestProvider } from "@/context/RequestContext";
+import AdminLayout from "@/components/layouts/AdminLayout";
 
 // Pages
 import Home from "./pages/Home";
@@ -57,11 +58,13 @@ const App = () => (
               <Route path="/driver/job/:requestId" element={<DriverJob />} />
               
               {/* Admin Routes */}
-              <Route path="/admin/dashboard" element={<AdminDashboard />} />
-              <Route path="/admin/requests" element={<AdminRequests />} />
-              <Route path="/admin/drivers" element={<AdminDrivers />} />
-              <Route path="/admin/request/:requestId" element={<AdminRequestDetails />} />
-              <Route path="/admin/migrate" element={<MigrateData />} />
+              <Route path="/admin" element={<AdminLayout />}>
+                <Route path="dashboard" element={<AdminDashboard />} />
+                <Route path="requests" element={<AdminRequests />} />
+                <Route path="drivers" element={<AdminDrivers />} />
+                <Route path="request/:requestId" element={<AdminRequestDetails />} />
+                <Route path="migrate-data" element={<MigrateData />} />
+              </Route>
               
               {/* 404 - Not Found */}
               <Route path="*" element={<NotFound />} />

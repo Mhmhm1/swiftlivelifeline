@@ -21,13 +21,17 @@ export interface UserData {
 }
 
 // Create dummy admin account
-const ADMIN_ACCOUNT = {
+const ADMIN_ACCOUNT: UserData & { password: string } = {
   id: "admin-001",
   name: "System Administrator",
   email: "admin@swiftaid.com",
   password: "admin123",
-  role: "admin" as UserRole,
+  role: "admin",
   phone: "+254700123456",
+  vehicleNumber: "",
+  available: false,
+  location: "",
+  onSchedule: false
 };
 
 // Create 20 driver accounts with Kenyan names
@@ -166,20 +170,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Login function
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
-      // First try direct Supabase authentication
+      console.log("Login attempt with:", email);
+      
+      // Check for admin account first - special handling
+      if (email.toLowerCase() === ADMIN_ACCOUNT.email.toLowerCase() && password === ADMIN_ACCOUNT.password) {
+        console.log("Admin account matched");
+        
+        // Set user directly from predefined account data
+        setUser({
+          id: ADMIN_ACCOUNT.id,
+          name: ADMIN_ACCOUNT.name,
+          email: ADMIN_ACCOUNT.email,
+          role: ADMIN_ACCOUNT.role,
+          phone: ADMIN_ACCOUNT.phone,
+          // For admin, we don't need these other properties
+        });
+        setIsAuthenticated(true);
+        toast.success("Admin logged in successfully");
+        return true;
+      }
+      
+      // Try direct Supabase authentication for non-admin users
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password
       });
       
-      if (!error) {
+      if (!error && data.user) {
+        console.log("Supabase login successful");
         return true;
       }
       
-      console.log("Supabase login failed, falling back to mock data:", error.message);
+      console.log("Supabase login failed, checking predefined accounts:", error?.message);
       
-      // If Supabase auth fails, check predefined accounts
-      const foundUser = PREDEFINED_ACCOUNTS.find(
+      // If Supabase auth fails, check predefined driver accounts
+      const foundUser = DRIVER_ACCOUNTS.find(
         (u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password
       );
       
@@ -189,27 +214,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       
       // User found in predefined accounts, try to create in Supabase
-      console.log("Found predefined user:", foundUser.email);
+      console.log("Found predefined driver:", foundUser.email);
       
-      // For admin users, we need special handling to make sure we don't try to create them
-      // if they already exist in Supabase
-      if (foundUser.role === 'admin') {
-        // Set user directly from predefined account data
-        setUser({
-          id: foundUser.id,
-          name: foundUser.name,
-          email: foundUser.email,
-          role: foundUser.role,
-          phone: foundUser.phone,
-          // For admin, we don't need these other properties
-        });
-        setIsAuthenticated(true);
-        toast.success("Admin logged in successfully");
-        return true;
-      }
-      
-      // For driver accounts, attempt to register them in Supabase
+      // For driver accounts, attempt to register them in Supabase if they don't exist
       try {
+        // First try to sign in directly in case the account already exists
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+          email,
+          password
+        });
+        
+        if (!signInError && signInData.user) {
+          console.log("Existing driver login successful");
+          return true;
+        }
+        
+        // If sign-in fails, try to register the account
+        console.log("Driver login failed, attempting to create account");
+        
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
@@ -225,15 +247,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (error) {
           console.error("Error signing up driver:", error);
           
-          // If the error is that the user already exists, try to sign in directly
+          // If the error is that the user already exists, try to sign in directly again
           if (error.message.includes("already registered")) {
-            const { data, error: signInError } = await supabase.auth.signInWithPassword({
+            console.log("User already exists, retrying login...");
+            const { error: retryError } = await supabase.auth.signInWithPassword({
               email,
               password
             });
             
-            if (signInError) {
-              console.error("Failed to sign in existing user:", signInError);
+            if (retryError) {
+              console.error("Failed to sign in existing user:", retryError);
               toast.error("Login failed. Please try again.");
               return false;
             }
@@ -247,7 +270,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         // For a new user, update their profile
         if (data.user) {
-          const driverData: any = foundUser as any;
+          const driverData = foundUser as any;
           
           // Update the profile with driver-specific data
           const profileData: any = {
@@ -423,98 +446,87 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Migration function to transfer predefined accounts to Supabase
   const migrateMockDataToSupabase = async (): Promise<{ success: boolean, message: string }> => {
     try {
-      // Try to check if the function exists first
-      try {
-        const { data, error } = await supabase.functions.invoke('migrate-mock-data', {
-          body: { mockData: PREDEFINED_ACCOUNTS }
-        });
-        
-        if (error) {
-          console.error("Migration error:", error);
-          return { success: false, message: error.message };
-        }
-        
-        return { 
-          success: true, 
-          message: `Successfully migrated ${data.migrated} users to Supabase` 
-        };
-      } catch (functionError) {
-        console.error("Function invocation error:", functionError);
-        
-        // Fallback: manual migration if the function doesn't exist or fails
-        let migratedCount = 0;
-        
-        // Process accounts one by one
-        for (const account of PREDEFINED_ACCOUNTS) {
-          try {
-            // Check if user already exists
-            const { data: existingUsers } = await supabase
-              .from('profiles')
-              .select('id')
-              .eq('email', account.email);
-            
-            if (existingUsers && existingUsers.length > 0) {
-              console.log(`User ${account.email} already exists, skipping...`);
-              continue;
-            }
-            
-            // Create auth user
-            const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-              email: account.email,
-              password: account.password,
-              email_confirm: true,
-              user_metadata: {
+      console.log("Starting migration of mock data");
+      
+      // Try the manual migration approach since the function might not exist
+      let migratedCount = 0;
+      
+      // Process accounts one by one
+      for (const account of PREDEFINED_ACCOUNTS) {
+        try {
+          // Check if user already exists
+          const { data: existingUsers } = await supabase
+            .from('profiles')
+            .select('id, email')
+            .eq('email', account.email);
+          
+          if (existingUsers && existingUsers.length > 0) {
+            console.log(`User ${account.email} already exists, skipping...`);
+            continue;
+          }
+          
+          // Create auth user
+          const { data: authData, error: authError } = await supabase.auth.signUp({
+            email: account.email,
+            password: (account as any).password,
+            options: {
+              data: {
                 name: account.name,
                 role: account.role,
                 phone: account.phone
               }
-            });
-            
-            if (authError) {
-              console.error(`Failed to create auth user ${account.email}:`, authError);
-              continue;
             }
-            
-            const userId = authData.user.id;
-            
-            // Create or update profile
-            const profileData: any = {
-              id: userId,
-              name: account.name,
-              email: account.email,
-              role: account.role,
-              phone: account.phone
-            };
-            
-            // Add driver-specific fields
-            if (account.role === 'driver') {
-              const driverData = account as typeof DRIVER_ACCOUNTS[0];
-              profileData.license_number = driverData.vehicleNumber;
-              profileData.status = driverData.available ? 'available' : 'unavailable';
-              profileData.current_location = driverData.location;
-              profileData.current_job = null;
-            }
-            
-            const { error: profileError } = await supabase
-              .from('profiles')
-              .upsert(profileData);
-            
-            if (profileError) {
-              console.error(`Failed to create profile for ${account.email}:`, profileError);
-              continue;
-            }
-            
-            migratedCount++;
-          } catch (accountError) {
-            console.error(`Error processing account ${account.email}:`, accountError);
+          });
+          
+          if (authError) {
+            console.error(`Failed to create auth user ${account.email}:`, authError);
+            continue;
           }
+          
+          const userId = authData.user?.id;
+          if (!userId) {
+            console.error(`Failed to get user ID for ${account.email}`);
+            continue;
+          }
+          
+          // Create or update profile
+          const profileData: any = {
+            id: userId,
+            name: account.name,
+            email: account.email,
+            role: account.role,
+            phone: account.phone
+          };
+          
+          // Add driver-specific fields
+          if (account.role === 'driver') {
+            const driverAccount = account as UserData;
+            profileData.license_number = driverAccount.vehicleNumber;
+            profileData.status = driverAccount.available ? 'available' : 'unavailable';
+            profileData.current_location = driverAccount.location;
+            profileData.current_job = null;
+          }
+          
+          const { error: profileError } = await supabase
+            .from('profiles')
+            .upsert(profileData);
+          
+          if (profileError) {
+            console.error(`Failed to create profile for ${account.email}:`, profileError);
+            continue;
+          }
+          
+          migratedCount++;
+          console.log(`Successfully migrated ${account.email}`);
+        } catch (accountError) {
+          console.error(`Error processing account ${account.email}:`, accountError);
         }
-        
-        return {
-          success: migratedCount > 0,
-          message: `Manually migrated ${migratedCount} users to Supabase`
-        };
       }
+      
+      return {
+        success: migratedCount > 0,
+        message: `Manually migrated ${migratedCount} users to Supabase`
+      };
     } catch (error) {
       console.error("Migration function error:", error);
       return { 

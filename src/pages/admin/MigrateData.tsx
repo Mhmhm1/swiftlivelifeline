@@ -15,7 +15,12 @@ const MigrateData: React.FC = () => {
 
   // Redirect if not admin
   React.useEffect(() => {
-    if (user && user.role !== "admin") {
+    if (!user) {
+      navigate("/login");
+      return;
+    }
+    
+    if (user.role !== "admin") {
       navigate("/admin/dashboard");
       toast.error("Only administrators can access this page");
     }
@@ -26,6 +31,7 @@ const MigrateData: React.FC = () => {
     
     setLoading(true);
     try {
+      console.log("Starting migration process...");
       const migrationResult = await migrateMockDataToSupabase();
       setResult(migrationResult);
       
@@ -35,6 +41,7 @@ const MigrateData: React.FC = () => {
         toast.error(migrationResult.message);
       }
     } catch (error) {
+      console.error("Migration error:", error);
       setResult({ 
         success: false, 
         message: (error as Error).message || "An unexpected error occurred" 
