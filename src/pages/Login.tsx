@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
@@ -6,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Ambulance, Mail, Lock } from "lucide-react";
+import { toast } from "@/components/ui/use-toast";
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState("");
@@ -33,6 +33,12 @@ const Login: React.FC = () => {
     try {
       await login(email, password);
       // Navigation will happen in useEffect above
+    } catch (error) {
+      toast({
+        title: "Error signing in",
+        description: (error as Error).message || "Please check your credentials and try again.",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }

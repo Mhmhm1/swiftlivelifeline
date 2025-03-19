@@ -9,6 +9,45 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      chat_messages: {
+        Row: {
+          id: string
+          request_id: string | null
+          sender_id: string | null
+          text: string
+          timestamp: string
+        }
+        Insert: {
+          id?: string
+          request_id?: string | null
+          sender_id?: string | null
+          text: string
+          timestamp?: string
+        }
+        Update: {
+          id?: string
+          request_id?: string | null
+          sender_id?: string | null
+          text?: string
+          timestamp?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_messages_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "emergency_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_messages_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       emergency_requests: {
         Row: {
           completed_at: string | null
