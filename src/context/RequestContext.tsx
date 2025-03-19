@@ -37,6 +37,7 @@ interface RequestContextType {
   getDriverRequests: (driverId: string) => RequestData[];
   getRequestById: (requestId: string) => RequestData | undefined;
   sendMessage: (requestId: string, senderId: string, text: string) => void;
+  getUserById: (userId: string) => UserData | undefined;
 }
 
 const RequestContext = createContext<RequestContextType>({
@@ -50,6 +51,7 @@ const RequestContext = createContext<RequestContextType>({
   getDriverRequests: () => [],
   getRequestById: () => undefined,
   sendMessage: () => {},
+  getUserById: () => undefined,
 });
 
 export const RequestProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -197,6 +199,7 @@ export const RequestProvider: React.FC<{ children: React.ReactNode }> = ({ child
         getDriverRequests,
         getRequestById,
         sendMessage,
+        getUserById,
       }}
     >
       {children}
