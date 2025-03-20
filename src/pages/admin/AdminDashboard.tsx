@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
@@ -51,7 +50,7 @@ const AdminDashboard: React.FC = () => {
         setDrivers(driversData || []);
         
         // Fetch requests
-        const requestsData = await getAllRequests();
+        const requestsData = getAllRequests();
         
         // Update stats
         setStats({
@@ -60,7 +59,7 @@ const AdminDashboard: React.FC = () => {
           totalRequests: requestsData?.length || 0,
           completedRequests: requestsData?.filter(r => r.status === 'completed').length || 0,
           pendingRequests: requestsData?.filter(r => r.status === 'pending').length || 0,
-          inProgressRequests: requestsData?.filter(r => r.status === 'in_progress').length || 0,
+          inProgressRequests: requestsData?.filter(r => r.status === 'in-progress').length || 0,
           cancelledRequests: requestsData?.filter(r => r.status === 'cancelled').length || 0,
         });
       } catch (error) {

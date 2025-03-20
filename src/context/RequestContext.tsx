@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { toast } from "sonner";
 import { UserData, useAuth } from "./AuthContext";
@@ -38,6 +37,7 @@ interface RequestContextType {
   getRequestById: (requestId: string) => RequestData | undefined;
   sendMessage: (requestId: string, senderId: string, text: string) => void;
   getUserById: (userId: string) => Promise<UserData | undefined>;
+  getAllRequests: () => RequestData[]; // Add this line to fix the error
 }
 
 const RequestContext = createContext<RequestContextType>({
@@ -52,6 +52,7 @@ const RequestContext = createContext<RequestContextType>({
   getRequestById: () => undefined,
   sendMessage: () => {},
   getUserById: async () => undefined,
+  getAllRequests: () => [], // Add this line to fix the error
 });
 
 export const RequestProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -191,6 +192,11 @@ export const RequestProvider: React.FC<{ children: React.ReactNode }> = ({ child
     );
   };
 
+  // Add the getAllRequests function implementation
+  const getAllRequests = () => {
+    return requests;
+  };
+
   return (
     <RequestContext.Provider
       value={{
@@ -205,6 +211,7 @@ export const RequestProvider: React.FC<{ children: React.ReactNode }> = ({ child
         getRequestById,
         sendMessage,
         getUserById,
+        getAllRequests, // Add this line to expose the function
       }}
     >
       {children}
