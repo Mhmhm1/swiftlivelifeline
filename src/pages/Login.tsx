@@ -30,6 +30,8 @@ const Login: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return; // Prevent multiple submissions
+    
     setLoading(true);
     
     try {
@@ -38,14 +40,17 @@ const Login: React.FC = () => {
       
       if (!success) {
         toast.error("Invalid login credentials. Please check your email and password.");
-        setLoading(false); // Make sure to stop loading state if login fails
+        setLoading(false);
+        return;
       }
-      // Navigation will happen in useEffect above if successful
-      // Note: Don't set loading to false here as we'll navigate away from this page on success
+      
+      // Don't set loading to false on success as we'll navigate away
+      toast.success("Login successful!");
+      // Navigation will happen in useEffect above
     } catch (error) {
       console.error("Login error:", error);
       toast.error((error as Error).message || "Login failed. Please try again.");
-      setLoading(false); // Make sure to stop loading state if login errors out
+      setLoading(false);
     }
   };
 

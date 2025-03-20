@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -314,13 +315,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Register function (for new users only)
   const register = async (userData: any, password: string): Promise<boolean> => {
     try {
+      // Ensure we're using a valid role
+      const validRole = "user"; // Always register new users as regular users
+      
       const { data, error } = await supabase.auth.signUp({
         email: userData.email,
         password,
         options: {
           data: {
             name: userData.name,
-            role: userData.role,
+            role: validRole,
             status: userData.gender, // Using status for gender
             phone: userData.phone,
           },
@@ -329,7 +333,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       if (error) throw error;
       
-      toast.success("Registration successful! Please check your email for verification.");
+      toast.success("Registration successful! Please verify your email to log in.");
       return true;
     } catch (error) {
       console.error("Registration error:", error);

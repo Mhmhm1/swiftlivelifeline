@@ -1,3 +1,4 @@
+
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
@@ -33,6 +34,8 @@ const Register: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return; // Prevent multiple submissions
+    
     setError("");
     setLoading(true);
 
@@ -58,7 +61,7 @@ const Register: React.FC = () => {
     }
 
     try {
-      // Register the user - always register new users as regular users
+      // Always register new users as regular users
       const validRole = "user";
       
       const success = await register(
@@ -74,9 +77,11 @@ const Register: React.FC = () => {
 
       if (success) {
         toast.success("Registration successful! Redirecting to login page...");
-        setTimeout(() => navigate("/login"), 1500);
+        // Use a timeout to show the success message before redirecting
+        setTimeout(() => {
+          navigate("/login");
+        }, 1500);
       } else {
-        // If registration was not successful, make sure we stop loading
         setLoading(false);
       }
     } catch (err) {
