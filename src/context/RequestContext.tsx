@@ -17,7 +17,7 @@ export interface RequestData {
   location: string;
   emergencyType: string;
   additionalInfo: string;
-  status: "pending" | "assigned" | "in-progress" | "completed";
+  status: "pending" | "assigned" | "in-progress" | "completed" | "cancelled"; // Added "cancelled" status
   driverId?: string;
   timestamp: Date;
   rating?: number;
