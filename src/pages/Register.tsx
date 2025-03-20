@@ -55,14 +55,16 @@ const Register: React.FC = () => {
 
     setLoading(true);
     try {
-      // Register the user
+      // Register the user - make sure we're using one of the valid roles
+      const validRole = "user"; // Always register new users as regular users
+      
       const success = await register(
         {
           name: formData.name,
           gender: formData.gender,
           email: formData.email,
           phone: formData.phone,
-          role: "user",
+          role: validRole,
         },
         formData.password
       );
@@ -71,6 +73,7 @@ const Register: React.FC = () => {
         navigate("/login");
       }
     } catch (err) {
+      console.error("Registration error:", err);
       setError("Registration failed. Please try again.");
     } finally {
       setLoading(false);

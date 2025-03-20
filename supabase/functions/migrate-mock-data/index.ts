@@ -39,73 +39,107 @@ serve(async (req) => {
     const results = [];
     
     for (const user of mockData) {
-      // Check if the user already exists in auth.users
-      const { data: existingAuthUsers, error: checkError } = await supabase
-        .from("profiles")
-        .select("id, email")
-        .eq("email", user.email);
-      
-      if (checkError) {
-        console.error(`Error checking user ${user.email}:`, checkError);
-        results.push({ email: user.email, status: "error", message: checkError.message });
-        continue;
-      }
-      
-      if (existingAuthUsers && existingAuthUsers.length > 0) {
-        console.log(`User ${user.email} already exists, skipping`);
-        results.push({ email: user.email, status: "skipped", message: "User already exists" });
-        continue;
-      }
-      
-      // Create the auth user if they don't exist
-      const { data: authUser, error: createError } = await supabase.auth.admin.createUser({
-        email: user.email,
-        password: user.password || "password123", // Default password if not provided
-        email_confirm: true,
-        user_metadata: {
-          name: user.name,
-          role: user.role,
-          phone: user.phone,
-          gender: user.gender,
-          profileImage: user.profileImage,
-          vehicleNumber: user.vehicleNumber,
-          available: user.available,
-          location: user.location,
-          onSchedule: user.onSchedule
-        }
-      });
-      
-      if (createError) {
-        console.error(`Error creating user ${user.email}:`, createError);
-        results.push({ email: user.email, status: "error", message: createError.message });
-        continue;
-      }
-      
-      // The profile should be created automatically through the trigger
-      // Update additional fields that might not be in the metadata
-      if (authUser && authUser.user) {
-        const { error: updateError } = await supabase
+      try {
+        // Check if the user already exists in auth.users
+        const { data: existingAuthUsers, error: checkError } = await supabase
           .from("profiles")
-          .update({
-            vehicle_number: user.vehicleNumber,
-            available: user.available,
-            location: user.location,
-            on_schedule: user.onSchedule
-          })
-          .eq("id", authUser.user.id);
+          .select("id, email")
+          .eq("email", user.email);
         
-        if (updateError) {
-          console.error(`Error updating profile for ${user.email}:`, updateError);
-          results.push({ email: user.email, status: "partial", message: "Auth user created but profile update failed" });
+        if (checkError) {
+          console.error(`Error checking user ${user.email}:`, checkError);
+          results.push({ email: user.email, status: "error", message: checkError.message });
           continue;
         }
         
-        results.push({ email: user.email, status: "success", id: authUser.user.id });
+        if (existingAuthUsers && existingAuthUsers.length > 0) {
+          console.log(`User ${user.email} already exists, skipping`);
+          results.push({ email: user.email, status: "skipped", message: "User already exists" });
+          continue;
+        }
+        
+        // Create the auth user if they don't exist
+        console.log(`Creating user ${user.email} with role ${user.role}`);
+        const { data: authUser, error: createError } = await supabase.auth.admin.createUser({
+          email: user.email,
+          password: user.password || "password123", // Default password if not provided
+          email_confirm: true,
+          user_metadata: {
+            name: user.name,
+            role: user.role,
+            phone: user.phone,
+            gender: user.gender,
+            profileImage: user.profileImage
+          }
+        });
+        
+        if (createError) {
+          console.error(`Error creating user ${user.email}:`, createError);
+          results.push({ email: user.email, status: "error", message: createError.message });
+          continue;
+        }
+        
+        // Additional driver-specific data should be updated in the profiles table
+        if (authUser && authUser.user) {
+          // Make sure the role is one of the valid ones
+          const validRole = ['user', 'driver', 'admin'].includes(user.role) ? user.role : 'user';
+          
+          // Create profile data with driver-specific fields
+          const profileData = {
+            id: authUser.user.id,
+            name: user.name,
+            email: user.email,
+            role: validRole,
+            phone: user.phone,
+            license_number: user.vehicleNumber || null,
+            status: user.available ? 'available' : 'unavailable',
+            current_location: user.location || null,
+            current_job: user.onSchedule ? 'active' : null
+          };
+          
+          console.log(`Upserting profile for ${user.email}:`, profileData);
+          
+          const { error: profileError } = await supabase
+            .from("profiles")
+            .upsert(profileData);
+          
+          if (profileError) {
+            console.error(`Error upserting profile for ${user.email}:`, profileError);
+            results.push({ 
+              email: user.email, 
+              status: "partial", 
+              message: `Auth user created but profile update failed: ${profileError.message}`,
+              id: authUser.user.id 
+            });
+            continue;
+          }
+          
+          results.push({ 
+            email: user.email, 
+            status: "success", 
+            id: authUser.user.id,
+            message: `User ${user.email} with role ${validRole} created successfully` 
+          });
+        }
+      } catch (userError) {
+        console.error(`Unexpected error processing user ${user.email}:`, userError);
+        results.push({ 
+          email: user.email, 
+          status: "error", 
+          message: `Unexpected error: ${userError.message}` 
+        });
       }
     }
     
+    // Count successful migrations
+    const successCount = results.filter(r => r.status === "success").length;
+    
     return new Response(
-      JSON.stringify({ results, migrated: results.filter(r => r.status === "success").length }),
+      JSON.stringify({ 
+        results, 
+        migrated: successCount,
+        message: `Successfully migrated ${successCount} users to Supabase` 
+      }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 200,

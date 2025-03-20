@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -78,7 +77,7 @@ interface AuthContextType {
   getDrivers: () => Promise<UserData[]>;
   getAvailableDrivers: () => Promise<UserData[]>;
   getUserById: (id: string) => Promise<UserData | undefined>;
-  migrateMockDataToSupabase: () => Promise<{ success: boolean, message: string }>;
+  migrateMockDataToSupabase: () => Promise<{ success: boolean, message: string, results: any[] }>;
 }
 
 // Create a context with a default value
@@ -95,7 +94,7 @@ const AuthContext = createContext<AuthContextType>({
   getDrivers: async () => [],
   getAvailableDrivers: async () => [],
   getUserById: async () => undefined,
-  migrateMockDataToSupabase: async () => ({ success: false, message: "Not implemented" }),
+  migrateMockDataToSupabase: async () => ({ success: false, message: "Not implemented", results: [] }),
 });
 
 // Helper function to map Supabase profile to UserData
@@ -444,120 +443,368 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // Migration function to transfer predefined accounts to Supabase
-  const migrateMockDataToSupabase = async (): Promise<{ success: boolean, message: string }> => {
+  const migrateMockDataToSupabase = async (): Promise<{ success: boolean, message: string, results: any[] }> => {
     try {
       console.log("Starting migration of mock data");
       
-      // Try the manual migration approach since the function might not exist
-      let migratedCount = 0;
-      
-      // Process accounts one by one
-      for (const account of PREDEFINED_ACCOUNTS) {
-        try {
-          // Check if user already exists
-          const { data: existingUsers } = await supabase
-            .from('profiles')
-            .select('id, email')
-            .eq('email', account.email);
-          
-          if (existingUsers && existingUsers.length > 0) {
-            console.log(`User ${account.email} already exists, skipping...`);
-            continue;
-          }
-          
-          // Create auth user
-          const { data: authData, error: authError } = await supabase.auth.signUp({
-            email: account.email,
-            password: (account as any).password,
-            options: {
-              data: {
-                name: account.name,
-                role: account.role,
-                phone: account.phone
-              }
-            }
-          });
-          
-          if (authError) {
-            console.error(`Failed to create auth user ${account.email}:`, authError);
-            continue;
-          }
-          
-          const userId = authData.user?.id;
-          if (!userId) {
-            console.error(`Failed to get user ID for ${account.email}`);
-            continue;
-          }
-          
-          // Create or update profile
-          const profileData: any = {
-            id: userId,
-            name: account.name,
-            email: account.email,
-            role: account.role,
-            phone: account.phone
-          };
-          
-          // Add driver-specific fields
-          if (account.role === 'driver') {
-            const driverAccount = account as UserData;
-            profileData.license_number = driverAccount.vehicleNumber;
-            profileData.status = driverAccount.available ? 'available' : 'unavailable';
-            profileData.current_location = driverAccount.location;
-            profileData.current_job = null;
-          }
-          
-          const { error: profileError } = await supabase
-            .from('profiles')
-            .upsert(profileData);
-          
-          if (profileError) {
-            console.error(`Failed to create profile for ${account.email}:`, profileError);
-            continue;
-          }
-          
-          migratedCount++;
-          console.log(`Successfully migrated ${account.email}`);
-        } catch (accountError) {
-          console.error(`Error processing account ${account.email}:`, accountError);
+      // First, try using the Supabase Edge Function
+      try {
+        console.log("Calling Supabase Edge Function for migration");
+        const { data, error } = await supabase.functions.invoke("migrate-mock-data", {
+          body: { mockData: PREDEFINED_ACCOUNTS }
+        });
+        
+        if (error) {
+          console.error("Edge function error:", error);
+          throw new Error(`Edge function error: ${error.message}`);
         }
+        
+        console.log("Migration function response:", data);
+        
+        return { 
+          success: true, 
+          message: data.message || `Successfully migrated ${data.migrated} users`,
+          results: data.results || []
+        };
+      } catch (functionError) {
+        console.error("Failed to use edge function, falling back to manual migration:", functionError);
+        
+        // Fallback to manual migration
+        let migratedCount = 0;
+        const results = [];
+        
+        // Process accounts one by one
+        for (const account of PREDEFINED_ACCOUNTS) {
+          try {
+            // Check if user already exists
+            const { data: existingUsers } = await supabase
+              .from('profiles')
+              .select('id, email')
+              .eq('email', account.email);
+            
+            if (existingUsers && existingUsers.length > 0) {
+              console.log(`User ${account.email} already exists, skipping...`);
+              results.push({ 
+                email: account.email, 
+                status: "skipped", 
+                message: "User already exists" 
+              });
+              continue;
+            }
+            
+            // Make sure the role is valid
+            const validRole = ['user', 'driver', 'admin'].includes(account.role) ? account.role : 'user';
+            
+            // Create auth user
+            const { data: authData, error: authError } = await supabase.auth.signUp({
+              email: account.email,
+              password: (account as any).password,
+              options: {
+                data: {
+                  name: account.name,
+                  role: validRole,
+                  phone: account.phone
+                }
+              }
+            });
+            
+            if (authError) {
+              console.error(`Failed to create auth user ${account.email}:`, authError);
+              results.push({ 
+                email: account.email, 
+                status: "error", 
+                message: authError.message 
+              });
+              continue;
+            }
+            
+            const userId = authData.user?.id;
+            if (!userId) {
+              console.error(`Failed to get user ID for ${account.email}`);
+              results.push({ 
+                email: account.email, 
+                status: "error", 
+                message: "Failed to get user ID" 
+              });
+              continue;
+            }
+            
+            // Create or update profile
+            const profileData: any = {
+              id: userId,
+              name: account.name,
+              email: account.email,
+              role: validRole,
+              phone: account.phone
+            };
+            
+            // Add driver-specific fields
+            if (account.role === 'driver') {
+              const driverAccount = account as UserData;
+              profileData.license_number = driverAccount.vehicleNumber;
+              profileData.status = driverAccount.available ? 'available' : 'unavailable';
+              profileData.current_location = driverAccount.location;
+              profileData.current_job = null;
+            }
+            
+            const { error: profileError } = await supabase
+              .from('profiles')
+              .upsert(profileData);
+            
+            if (profileError) {
+              console.error(`Failed to create profile for ${account.email}:`, profileError);
+              results.push({ 
+                email: account.email, 
+                status: "partial", 
+                message: `Auth user created but profile update failed: ${profileError.message}`,
+                id: userId
+              });
+              continue;
+            }
+            
+            migratedCount++;
+            results.push({ 
+              email: account.email, 
+              status: "success",
+              id: userId,
+              message: `User ${account.email} with role ${validRole} created successfully`
+            });
+            console.log(`Successfully migrated ${account.email}`);
+          } catch (accountError) {
+            console.error(`Error processing account ${account.email}:`, accountError);
+            results.push({ 
+              email: account.email, 
+              status: "error", 
+              message: (accountError as Error).message 
+            });
+          }
+        }
+        
+        return {
+          success: migratedCount > 0,
+          message: `Manually migrated ${migratedCount} users to Supabase`,
+          results
+        };
       }
-      
-      return {
-        success: migratedCount > 0,
-        message: `Manually migrated ${migratedCount} users to Supabase`
-      };
     } catch (error) {
       console.error("Migration function error:", error);
       return { 
         success: false, 
-        message: (error as Error).message || "Migration failed. Please try again." 
+        message: (error as Error).message || "Migration failed. Please try again.",
+        results: []
       };
     }
   };
 
-  return (
-    <AuthContext.Provider
-      value={{
-        isAuthenticated,
-        user,
-        login,
-        logout,
-        register,
-        updateDriverProfile,
-        updateDriverAvailability,
-        updateDriverSchedule,
-        updateDriverLocation,
-        getDrivers,
-        getAvailableDrivers,
-        getUserById,
-        migrateMockDataToSupabase
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
-  );
-};
+  // Register function (for new users only)
+  const register = async (userData: any, password: string): Promise<boolean> => {
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email: userData.email,
+        password,
+        options: {
+          data: {
+            name: userData.name,
+            role: userData.role,
+            status: userData.gender, // Using status for gender
+            phone: userData.phone,
+          },
+        },
+      });
+      
+      if (error) throw error;
+      
+      toast.success("Registration successful! Please check your email for verification.");
+      return true;
+    } catch (error) {
+      console.error("Registration error:", error);
+      toast.error((error as Error).message || "Registration failed. Please try again.");
+      return false;
+    }
+  };
 
-// Create a custom hook to use the context
-export const useAuth = () => useContext(AuthContext);
+  // Update driver profile
+  const updateDriverProfile = async (driverId: string, data: Partial<UserData>) => {
+    try {
+      // Map from our interface to the database structure
+      const profileData: any = {};
+      
+      if (data.name) profileData.name = data.name;
+      if (data.phone) profileData.phone = data.phone;
+      if (data.gender) profileData.status = data.gender; // Using status for gender
+      if (data.profileImage) profileData.photo_url = data.profileImage;
+      if (data.vehicleNumber) profileData.license_number = data.vehicleNumber; // Using license_number for vehicle
+      if (data.available !== undefined) profileData.status = data.available ? 'available' : 'unavailable';
+      if (data.location) profileData.current_location = data.location;
+      if (data.onSchedule !== undefined) profileData.current_job = data.onSchedule ? 'active' : null;
+      
+      const { error } = await supabase
+        .from('profiles')
+        .update(profileData)
+        .eq('id', driverId);
+      
+      if (error) throw error;
+      
+      // If the current user is the one being updated, update that too
+      if (user && user.id === driverId) {
+        const updatedUser = { ...user, ...data };
+        setUser(updatedUser);
+      }
+      
+      toast.success("Profile updated successfully");
+    } catch (error) {
+      console.error("Error updating profile:", error);
+      toast.error("Failed to update profile");
+    }
+  };
+
+  // Update driver availability
+  const updateDriverAvailability = (driverId: string, available: boolean) => {
+    updateDriverProfile(driverId, { available });
+  };
+
+  // Update driver schedule
+  const updateDriverSchedule = (driverId: string, onSchedule: boolean) => {
+    updateDriverProfile(driverId, { onSchedule });
+  };
+
+  // Update driver location
+  const updateDriverLocation = (driverId: string, location: string) => {
+    updateDriverProfile(driverId, { location });
+  };
+
+  // Get all drivers
+  const getDrivers = async (): Promise<UserData[]> => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('role', 'driver');
+      
+      if (error) throw error;
+      
+      return data.map(mapProfileToUserData);
+    } catch (error) {
+      console.error("Error fetching drivers:", error);
+      return [];
+    }
+  };
+
+  // Get only available drivers
+  const getAvailableDrivers = async (): Promise<UserData[]> => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('role', 'driver')
+        .eq('status', 'available')
+        .is('current_job', null);
+      
+      if (error) throw error;
+      
+      return data.map(mapProfileToUserData);
+    } catch (error) {
+      console.error("Error fetching available drivers:", error);
+      return [];
+    }
+  };
+
+  // Get user by ID
+  const getUserById = async (id: string): Promise<UserData | undefined> => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', id)
+        .single();
+      
+      if (error) throw error;
+      
+      return mapProfileToUserData(data);
+    } catch (error) {
+      console.error("Error fetching user by ID:", error);
+      return undefined;
+    }
+  };
+
+  // Migration function to transfer predefined accounts to Supabase
+  const migrateMockDataToSupabase = async (): Promise<{ success: boolean, message: string, results: any[] }> => {
+    try {
+      console.log("Starting migration of mock data");
+      
+      // First, try using the Supabase Edge Function
+      try {
+        console.log("Calling Supabase Edge Function for migration");
+        const { data, error } = await supabase.functions.invoke("migrate-mock-data", {
+          body: { mockData: PREDEFINED_ACCOUNTS }
+        });
+        
+        if (error) {
+          console.error("Edge function error:", error);
+          throw new Error(`Edge function error: ${error.message}`);
+        }
+        
+        console.log("Migration function response:", data);
+        
+        return { 
+          success: true, 
+          message: data.message || `Successfully migrated ${data.migrated} users`,
+          results: data.results || []
+        };
+      } catch (functionError) {
+        console.error("Failed to use edge function, falling back to manual migration:", functionError);
+        
+        // Fallback to manual migration
+        let migratedCount = 0;
+        const results = [];
+        
+        // Process accounts one by one
+        for (const account of PREDEFINED_ACCOUNTS) {
+          try {
+            // Check if user already exists
+            const { data: existingUsers } = await supabase
+              .from('profiles')
+              .select('id, email')
+              .eq('email', account.email);
+            
+            if (existingUsers && existingUsers.length > 0) {
+              console.log(`User ${account.email} already exists, skipping...`);
+              results.push({ 
+                email: account.email, 
+                status: "skipped", 
+                message: "User already exists" 
+              });
+              continue;
+            }
+            
+            // Make sure the role is valid
+            const validRole = ['user', 'driver', 'admin'].includes(account.role) ? account.role : 'user';
+            
+            // Create auth user
+            const { data: authData, error: authError } = await supabase.auth.signUp({
+              email: account.email,
+              password: (account as any).password,
+              options: {
+                data: {
+                  name: account.name,
+                  role: validRole,
+                  phone: account.phone
+                }
+              }
+            });
+            
+            if (authError) {
+              console.error(`Failed to create auth user ${account.email}:`, authError);
+              results.push({ 
+                email: account.email, 
+                status: "error", 
+                message: authError.message 
+              });
+              continue;
+            }
+            
+            const userId = authData.user?.id;
+            if (!userId) {
+              console.error(`Failed to get user ID for ${account.email}`);
+              results.push({ 
+                email

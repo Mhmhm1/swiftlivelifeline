@@ -10,7 +10,7 @@ import { useNavigate } from "react-router-dom";
 const MigrateData: React.FC = () => {
   const { migrateMockDataToSupabase, user } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [result, setResult] = useState<{ success: boolean; message: string; details?: any[] } | null>(null);
   const navigate = useNavigate();
 
   // Redirect if not admin
@@ -33,7 +33,14 @@ const MigrateData: React.FC = () => {
     try {
       console.log("Starting migration process...");
       const migrationResult = await migrateMockDataToSupabase();
-      setResult(migrationResult);
+      
+      console.log("Migration result:", migrationResult);
+      
+      setResult({
+        success: migrationResult.success,
+        message: migrationResult.message,
+        details: migrationResult.results
+      });
       
       if (migrationResult.success) {
         toast.success(migrationResult.message);
@@ -94,6 +101,23 @@ const MigrateData: React.FC = () => {
                   </h3>
                   <div className={`mt-2 text-sm ${result.success ? 'text-green-700' : 'text-red-700'}`}>
                     <p>{result.message}</p>
+                    
+                    {result.details && result.details.length > 0 && (
+                      <div className="mt-2 max-h-40 overflow-y-auto">
+                        <p className="font-medium mb-1">Details:</p>
+                        <ul className="list-disc ml-5 space-y-1">
+                          {result.details.map((item, idx) => (
+                            <li key={idx} className={
+                              item.status === "success" ? "text-green-600" : 
+                              item.status === "skipped" ? "text-blue-600" : 
+                              "text-red-600"
+                            }>
+                              {item.email}: {item.message || item.status}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
