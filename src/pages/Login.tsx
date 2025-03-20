@@ -38,13 +38,14 @@ const Login: React.FC = () => {
       
       if (!success) {
         toast.error("Invalid login credentials. Please check your email and password.");
+        setLoading(false); // Make sure to stop loading state if login fails
       }
-      // Navigation will happen in useEffect above
+      // Navigation will happen in useEffect above if successful
+      // Note: Don't set loading to false here as we'll navigate away from this page on success
     } catch (error) {
       console.error("Login error:", error);
       toast.error((error as Error).message || "Login failed. Please try again.");
-    } finally {
-      setLoading(false);
+      setLoading(false); // Make sure to stop loading state if login errors out
     }
   };
 

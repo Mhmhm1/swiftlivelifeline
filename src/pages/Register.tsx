@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
@@ -7,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Ambulance, User, Mail, Phone, Lock } from "lucide-react";
+import { toast } from "sonner";
 
 const Register: React.FC = () => {
   const [formData, setFormData] = useState({
@@ -34,15 +34,18 @@ const Register: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setLoading(true);
 
     // Validation
     if (formData.password !== formData.confirmPassword) {
       setError("Passwords do not match");
+      setLoading(false);
       return;
     }
 
     if (formData.password.length < 6) {
       setError("Password must be at least 6 characters");
+      setLoading(false);
       return;
     }
 
@@ -50,13 +53,13 @@ const Register: React.FC = () => {
     const phoneRegex = /^\+254\d{9}$/;
     if (!phoneRegex.test(formData.phone)) {
       setError("Phone number should be in format: +254XXXXXXXXX");
+      setLoading(false);
       return;
     }
 
-    setLoading(true);
     try {
-      // Register the user - make sure we're using one of the valid roles
-      const validRole = "user"; // Always register new users as regular users
+      // Register the user - always register new users as regular users
+      const validRole = "user";
       
       const success = await register(
         {
@@ -70,12 +73,15 @@ const Register: React.FC = () => {
       );
 
       if (success) {
-        navigate("/login");
+        toast.success("Registration successful! Redirecting to login page...");
+        setTimeout(() => navigate("/login"), 1500);
+      } else {
+        // If registration was not successful, make sure we stop loading
+        setLoading(false);
       }
     } catch (err) {
       console.error("Registration error:", err);
       setError("Registration failed. Please try again.");
-    } finally {
       setLoading(false);
     }
   };
