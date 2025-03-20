@@ -37,18 +37,20 @@ const Register: React.FC = () => {
     if (loading) return; // Prevent multiple submissions
     
     setError("");
-    setLoading(true);
-
+    
     // Validation
+    if (!formData.name || !formData.email || !formData.gender || !formData.phone || !formData.password || !formData.confirmPassword) {
+      setError("All fields are required");
+      return;
+    }
+    
     if (formData.password !== formData.confirmPassword) {
       setError("Passwords do not match");
-      setLoading(false);
       return;
     }
 
     if (formData.password.length < 6) {
       setError("Password must be at least 6 characters");
-      setLoading(false);
       return;
     }
 
@@ -56,10 +58,11 @@ const Register: React.FC = () => {
     const phoneRegex = /^\+254\d{9}$/;
     if (!phoneRegex.test(formData.phone)) {
       setError("Phone number should be in format: +254XXXXXXXXX");
-      setLoading(false);
       return;
     }
 
+    setLoading(true);
+    
     try {
       // Always register new users as regular users
       const validRole = "user";
@@ -80,15 +83,17 @@ const Register: React.FC = () => {
         
         // Use a timeout to show the success message before redirecting
         setTimeout(() => {
-          setLoading(false); // Set loading to false before navigating
+          setLoading(false);
           navigate("/login");
         }, 1500);
       } else {
+        toast.error("Registration failed. Please try again.");
         setLoading(false);
       }
     } catch (err) {
       console.error("Registration error:", err);
-      setError("Registration failed. Please try again.");
+      setError((err as Error).message || "Registration failed. Please try again.");
+      toast.error((err as Error).message || "Registration failed. Please try again.");
       setLoading(false);
     }
   };

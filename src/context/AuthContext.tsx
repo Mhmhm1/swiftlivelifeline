@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -119,23 +118,38 @@ const mapProfileToUserData = (profile: any): UserData => {
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [user, setUser] = useState<UserData | null>(null);
+  const [authInitialized, setAuthInitialized] = useState(false);
 
   // Check for existing session on component mount
   useEffect(() => {
     const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (session) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
         
-        if (profile) {
-          setUser(mapProfileToUserData(profile));
-          setIsAuthenticated(true);
+        if (session) {
+          console.log("Existing session found:", session.user.id);
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', session.user.id)
+            .single();
+          
+          if (profile) {
+            const userData = mapProfileToUserData(profile);
+            console.log("User profile loaded:", userData);
+            setUser(userData);
+            setIsAuthenticated(true);
+          } else {
+            console.log("No profile found for user:", session.user.id);
+          }
+        } else {
+          console.log("No existing session found");
         }
+        
+        setAuthInitialized(true);
+      } catch (error) {
+        console.error("Error checking auth:", error);
+        setAuthInitialized(true);
       }
     };
     
@@ -144,18 +158,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Set up auth state change listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        console.log("Auth state changed:", event, session?.user?.id);
+        
         if (event === 'SIGNED_IN' && session) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', session.user.id)
-            .single();
-          
-          if (profile) {
-            setUser(mapProfileToUserData(profile));
-            setIsAuthenticated(true);
+          try {
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', session.user.id)
+              .single();
+            
+            if (profile) {
+              const userData = mapProfileToUserData(profile);
+              console.log("User signed in, profile loaded:", userData);
+              setUser(userData);
+              setIsAuthenticated(true);
+            } else {
+              console.log("No profile found after sign in for user:", session.user.id);
+            }
+          } catch (error) {
+            console.error("Error loading profile after sign in:", error);
           }
         } else if (event === 'SIGNED_OUT') {
+          console.log("User signed out");
           setUser(null);
           setIsAuthenticated(false);
         }
@@ -183,185 +208,79 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           email: ADMIN_ACCOUNT.email,
           role: ADMIN_ACCOUNT.role,
           phone: ADMIN_ACCOUNT.phone,
-          // For admin, we don't need these other properties
         });
         setIsAuthenticated(true);
         toast.success("Admin logged in successfully");
         return true;
       }
       
-      // Try direct Supabase authentication for non-admin users
+      // Check predefined driver accounts
+      const foundDriver = DRIVER_ACCOUNTS.find(
+        (u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password
+      );
+      
+      if (foundDriver) {
+        console.log("Driver account matched:", foundDriver);
+        
+        // Set user directly from predefined account data
+        setUser({
+          id: foundDriver.id,
+          name: foundDriver.name,
+          email: foundDriver.email,
+          role: foundDriver.role,
+          phone: foundDriver.phone,
+          vehicleNumber: foundDriver.vehicleNumber,
+          available: foundDriver.available,
+          location: foundDriver.location,
+        });
+        setIsAuthenticated(true);
+        toast.success("Driver logged in successfully");
+        return true;
+      }
+      
+      // Try Supabase authentication if not a predefined account
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password
       });
       
-      if (!error && data.user) {
-        console.log("Supabase login successful");
-        // Fetch the user profile immediately to ensure we have the role
+      if (error) {
+        console.error("Supabase login error:", error.message);
+        return false;
+      }
+      
+      if (data.user) {
+        console.log("Supabase login successful for:", data.user.id);
+        
         try {
-          const { data: profile } = await supabase
+          const { data: profile, error: profileError } = await supabase
             .from('profiles')
             .select('*')
             .eq('id', data.user.id)
             .single();
-            
+          
+          if (profileError) {
+            console.error("Error getting user profile:", profileError);
+            return false;
+          }
+          
           if (profile) {
-            setUser(mapProfileToUserData(profile));
+            const userData = mapProfileToUserData(profile);
+            console.log("User profile loaded:", userData);
+            setUser(userData);
             setIsAuthenticated(true);
+            return true;
+          } else {
+            console.error("No profile found for user:", data.user.id);
+            return false;
           }
         } catch (profileError) {
-          console.error("Error fetching user profile:", profileError);
-        }
-        return true;
-      }
-      
-      console.log("Supabase login failed, checking predefined accounts:", error?.message);
-      
-      // If Supabase auth fails, check predefined driver accounts
-      const foundUser = DRIVER_ACCOUNTS.find(
-        (u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password
-      );
-      
-      if (!foundUser) {
-        console.error("No matching user found in predefined accounts");
-        return false;
-      }
-      
-      // User found in predefined accounts, try to create in Supabase
-      console.log("Found predefined driver:", foundUser.email);
-      
-      // For driver accounts, attempt to register them in Supabase if they don't exist
-      try {
-        // First try to sign in directly in case the account already exists
-        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-          email,
-          password
-        });
-        
-        if (!signInError && signInData.user) {
-          console.log("Existing driver login successful");
-          // Set user data immediately
-          setUser({
-            id: signInData.user.id,
-            name: foundUser.name,
-            email: foundUser.email,
-            role: foundUser.role,
-            phone: foundUser.phone,
-            vehicleNumber: foundUser.vehicleNumber,
-            available: foundUser.available,
-            location: foundUser.location,
-          });
-          setIsAuthenticated(true);
-          return true;
-        }
-        
-        // If sign-in fails, try to register the account
-        console.log("Driver login failed, attempting to create account");
-        
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: {
-              name: foundUser.name,
-              role: foundUser.role,
-              phone: foundUser.phone,
-            },
-          },
-        });
-        
-        if (error) {
-          console.error("Error signing up driver:", error);
-          
-          // If the error is that the user already exists, try to sign in directly again
-          if (error.message.includes("already registered")) {
-            console.log("User already exists, retrying login...");
-            const { data: retryData, error: retryError } = await supabase.auth.signInWithPassword({
-              email,
-              password
-            });
-            
-            if (retryError) {
-              console.error("Failed to sign in existing user:", retryError);
-              return false;
-            }
-            
-            // Set user data immediately if retry succeeded
-            if (retryData.user) {
-              // Fetch the user profile
-              const { data: profile } = await supabase
-                .from('profiles')
-                .select('*')
-                .eq('id', retryData.user.id)
-                .single();
-                
-              if (profile) {
-                setUser(mapProfileToUserData(profile));
-                setIsAuthenticated(true);
-              } else {
-                // Fallback to driver data
-                setUser({
-                  id: retryData.user.id,
-                  name: foundUser.name,
-                  email: foundUser.email,
-                  role: foundUser.role,
-                  phone: foundUser.phone,
-                  vehicleNumber: foundUser.vehicleNumber,
-                  available: foundUser.available,
-                  location: foundUser.location,
-                });
-                setIsAuthenticated(true);
-              }
-            }
-            
-            return true;
-          }
-          
+          console.error("Error loading user profile:", profileError);
           return false;
         }
-        
-        // For a new user, update their profile
-        if (data.user) {
-          const driverData = foundUser as any;
-          
-          // Set user data immediately
-          setUser({
-            id: data.user.id,
-            name: foundUser.name,
-            email: foundUser.email,
-            role: foundUser.role,
-            phone: foundUser.phone,
-            vehicleNumber: foundUser.vehicleNumber,
-            available: foundUser.available,
-            location: foundUser.location,
-          });
-          setIsAuthenticated(true);
-          
-          // Update the profile with driver-specific data
-          const profileData: any = {
-            license_number: driverData.vehicleNumber || null,
-            status: driverData.available ? 'available' : 'unavailable',
-            current_location: driverData.location || null,
-            current_job: driverData.onSchedule ? 'active' : null,
-          };
-          
-          const { error: updateError } = await supabase
-            .from('profiles')
-            .update(profileData)
-            .eq('id', data.user.id);
-          
-          if (updateError) {
-            console.error("Error updating profile:", updateError);
-          }
-        }
-        
-        toast.success("Account created and logged in successfully!");
-        return true;
-      } catch (signupError) {
-        console.error("Error during signup process:", signupError);
-        return false;
       }
+      
+      return false;
     } catch (error) {
       console.error("Login error:", error);
       return false;
@@ -370,17 +289,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Logout function
   const logout = async () => {
-    await supabase.auth.signOut();
-    setUser(null);
-    setIsAuthenticated(false);
-    toast.info("You have been logged out");
+    try {
+      await supabase.auth.signOut();
+      setUser(null);
+      setIsAuthenticated(false);
+      toast.info("You have been logged out");
+    } catch (error) {
+      console.error("Logout error:", error);
+      toast.error("Failed to log out. Please try again.");
+    }
   };
 
   // Register function (for new users only)
   const register = async (userData: any, password: string): Promise<boolean> => {
     try {
+      console.log("Registering user:", userData);
+      
       // Ensure we're using a valid role
       const validRole = "user"; // Always register new users as regular users
+      
+      // First check if a user with this email already exists in Supabase
+      try {
+        const { data: existingUsers, error: existingError } = await supabase.auth.signInWithPassword({
+          email: userData.email,
+          password: "dummy-password-just-to-check-existence"
+        });
+        
+        if (existingUsers && !existingError) {
+          console.error("User already exists");
+          toast.error("An account with this email already exists");
+          return false;
+        }
+      } catch (existingCheckError) {
+        // This is expected to fail if the user doesn't exist, which is what we want
+        console.log("User does not exist, proceeding with registration");
+      }
       
       const { data, error } = await supabase.auth.signUp({
         email: userData.email,
@@ -395,10 +338,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         },
       });
       
-      if (error) throw error;
+      if (error) {
+        console.error("Registration error:", error);
+        toast.error(error.message || "Registration failed. Please try again.");
+        return false;
+      }
       
-      toast.success("Registration successful! Please verify your email to log in.");
-      return true;
+      if (data.user) {
+        console.log("User registered successfully:", data.user.id);
+        toast.success("Registration successful! Please log in with your new account.");
+        return true;
+      }
+      
+      return false;
     } catch (error) {
       console.error("Registration error:", error);
       toast.error((error as Error).message || "Registration failed. Please try again.");

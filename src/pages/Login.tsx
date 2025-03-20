@@ -19,6 +19,8 @@ const Login: React.FC = () => {
   useEffect(() => {
     if (isAuthenticated && user) {
       console.log("User authenticated, redirecting based on role:", user.role);
+      toast.success("Login successful!");
+      
       // Force a small delay to ensure toast is visible
       setTimeout(() => {
         if (user.role === "admin") {
@@ -34,12 +36,17 @@ const Login: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!email || !password) {
+      toast.error("Please enter both email and password");
+      return;
+    }
+    
     if (loading) return; // Prevent multiple submissions
     
     setLoading(true);
+    console.log("Attempting login with:", email, password);
     
     try {
-      console.log("Attempting login with:", email, password);
       const success = await login(email, password);
       
       if (!success) {
@@ -48,17 +55,9 @@ const Login: React.FC = () => {
         return;
       }
       
-      // Only show success toast - redirection will happen in useEffect
-      toast.success("Login successful!");
+      // Login was successful, but don't set loading to false here
+      // The useEffect will handle the redirection on successful login
       
-      // For non-Supabase users (like admin), we need to manually set loading to false
-      // because we don't get auth state change events
-      if (email.toLowerCase() === "admin@swiftaid.com") {
-        // Give the effect a chance to run for redirection
-        setTimeout(() => {
-          setLoading(false);
-        }, 1000);
-      }
     } catch (error) {
       console.error("Login error:", error);
       toast.error((error as Error).message || "Login failed. Please try again.");
