@@ -198,6 +198,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       if (!error && data.user) {
         console.log("Supabase login successful");
+        // Fetch the user profile immediately to ensure we have the role
+        try {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', data.user.id)
+            .single();
+            
+          if (profile) {
+            setUser(mapProfileToUserData(profile));
+            setIsAuthenticated(true);
+          }
+        } catch (profileError) {
+          console.error("Error fetching user profile:", profileError);
+        }
         return true;
       }
       
@@ -226,6 +241,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         if (!signInError && signInData.user) {
           console.log("Existing driver login successful");
+          // Set user data immediately
+          setUser({
+            id: signInData.user.id,
+            name: foundUser.name,
+            email: foundUser.email,
+            role: foundUser.role,
+            phone: foundUser.phone,
+            vehicleNumber: foundUser.vehicleNumber,
+            available: foundUser.available,
+            location: foundUser.location,
+          });
+          setIsAuthenticated(true);
           return true;
         }
         
@@ -250,27 +277,66 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // If the error is that the user already exists, try to sign in directly again
           if (error.message.includes("already registered")) {
             console.log("User already exists, retrying login...");
-            const { error: retryError } = await supabase.auth.signInWithPassword({
+            const { data: retryData, error: retryError } = await supabase.auth.signInWithPassword({
               email,
               password
             });
             
             if (retryError) {
               console.error("Failed to sign in existing user:", retryError);
-              toast.error("Login failed. Please try again.");
               return false;
+            }
+            
+            // Set user data immediately if retry succeeded
+            if (retryData.user) {
+              // Fetch the user profile
+              const { data: profile } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', retryData.user.id)
+                .single();
+                
+              if (profile) {
+                setUser(mapProfileToUserData(profile));
+                setIsAuthenticated(true);
+              } else {
+                // Fallback to driver data
+                setUser({
+                  id: retryData.user.id,
+                  name: foundUser.name,
+                  email: foundUser.email,
+                  role: foundUser.role,
+                  phone: foundUser.phone,
+                  vehicleNumber: foundUser.vehicleNumber,
+                  available: foundUser.available,
+                  location: foundUser.location,
+                });
+                setIsAuthenticated(true);
+              }
             }
             
             return true;
           }
           
-          toast.error("Error creating account in Supabase");
           return false;
         }
         
         // For a new user, update their profile
         if (data.user) {
           const driverData = foundUser as any;
+          
+          // Set user data immediately
+          setUser({
+            id: data.user.id,
+            name: foundUser.name,
+            email: foundUser.email,
+            role: foundUser.role,
+            phone: foundUser.phone,
+            vehicleNumber: foundUser.vehicleNumber,
+            available: foundUser.available,
+            location: foundUser.location,
+          });
+          setIsAuthenticated(true);
           
           // Update the profile with driver-specific data
           const profileData: any = {
@@ -294,12 +360,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return true;
       } catch (signupError) {
         console.error("Error during signup process:", signupError);
-        toast.error("Login failed. Please try again.");
         return false;
       }
     } catch (error) {
       console.error("Login error:", error);
-      toast.error("Error during login");
       return false;
     }
   };

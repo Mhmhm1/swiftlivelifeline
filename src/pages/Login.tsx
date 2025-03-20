@@ -17,14 +17,18 @@ const Login: React.FC = () => {
 
   // Direct redirection after login
   useEffect(() => {
-    if (isAuthenticated) {
-      if (user?.role === "admin") {
-        navigate("/admin/dashboard");
-      } else if (user?.role === "driver") {
-        navigate("/driver/dashboard");
-      } else if (user?.role === "user") {
-        navigate("/user/dashboard");
-      }
+    if (isAuthenticated && user) {
+      console.log("User authenticated, redirecting based on role:", user.role);
+      // Force a small delay to ensure toast is visible
+      setTimeout(() => {
+        if (user.role === "admin") {
+          navigate("/admin/dashboard");
+        } else if (user.role === "driver") {
+          navigate("/driver/dashboard");
+        } else if (user.role === "user") {
+          navigate("/user/dashboard");
+        }
+      }, 500);
     }
   }, [isAuthenticated, user, navigate]);
 
@@ -44,9 +48,17 @@ const Login: React.FC = () => {
         return;
       }
       
-      // Don't set loading to false on success as we'll navigate away
+      // Only show success toast - redirection will happen in useEffect
       toast.success("Login successful!");
-      // Navigation will happen in useEffect above
+      
+      // For non-Supabase users (like admin), we need to manually set loading to false
+      // because we don't get auth state change events
+      if (email.toLowerCase() === "admin@swiftaid.com") {
+        // Give the effect a chance to run for redirection
+        setTimeout(() => {
+          setLoading(false);
+        }, 1000);
+      }
     } catch (error) {
       console.error("Login error:", error);
       toast.error((error as Error).message || "Login failed. Please try again.");

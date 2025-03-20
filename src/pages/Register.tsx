@@ -77,8 +77,10 @@ const Register: React.FC = () => {
 
       if (success) {
         toast.success("Registration successful! Redirecting to login page...");
+        
         // Use a timeout to show the success message before redirecting
         setTimeout(() => {
+          setLoading(false); // Set loading to false before navigating
           navigate("/login");
         }, 1500);
       } else {
