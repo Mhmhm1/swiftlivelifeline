@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Layout from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,58 +14,14 @@ import { AlertCircle, Ambulance, CheckCircle2, Clock, User, MapPin, AlertTriangl
 const AdminRequestDetails: React.FC = () => {
   const { requestId } = useParams<{ requestId: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const { getRequestById, getUserById } = useRequest();
-  const [requesterData, setRequesterData] = useState<any>(null);
-  const [driverData, setDriverData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [request, setRequest] = useState<any>(null);
-  
-  useEffect(() => {
-    const fetchData = async () => {
-      if (!requestId) return;
-      
-      setLoading(true);
-      try {
-        const requestData = getRequestById(requestId);
-        setRequest(requestData);
-        
-        if (requestData) {
-          // Fetch requester data
-          const requester = await getUserById(requestData.userId);
-          setRequesterData(requester);
-          
-          // Fetch driver data if assigned
-          if (requestData.driverId) {
-            const driver = await getUserById(requestData.driverId);
-            setDriverData(driver);
-          }
-        }
-      } catch (error) {
-        console.error("Error fetching request details:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    fetchData();
-  }, [requestId, getUserById, getRequestById]);
+  const { user, getUserById } = useAuth();
+  const { getRequestById } = useRequest();
   
   if (!user || !requestId) {
     return <Layout>Invalid request</Layout>;
   }
   
-  if (loading) {
-    return (
-      <Layout>
-        <div className="max-w-3xl mx-auto">
-          <div className="flex justify-center py-10">
-            <div className="animate-spin h-8 w-8 border-t-2 border-b-2 border-gray-900 rounded-full"></div>
-          </div>
-        </div>
-      </Layout>
-    );
-  }
+  const request = getRequestById(requestId);
   
   if (!request) {
     return (
@@ -87,6 +43,12 @@ const AdminRequestDetails: React.FC = () => {
       </Layout>
     );
   }
+  
+  // Get requester data
+  const requesterData = getUserById(request.userId);
+  
+  // Get driver data if assigned
+  const driverData = request.driverId ? getUserById(request.driverId) : null;
   
   // Format timestamp for display
   const formatDate = (date: Date) => {

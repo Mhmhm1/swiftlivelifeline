@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Ambulance, User, Mail, Phone, Lock } from "lucide-react";
-import { toast } from "sonner";
 
 const Register: React.FC = () => {
   const [formData, setFormData] = useState({
@@ -34,16 +33,9 @@ const Register: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (loading) return; // Prevent multiple submissions
-    
     setError("");
-    
+
     // Validation
-    if (!formData.name || !formData.email || !formData.gender || !formData.phone || !formData.password || !formData.confirmPassword) {
-      setError("All fields are required");
-      return;
-    }
-    
     if (formData.password !== formData.confirmPassword) {
       setError("Passwords do not match");
       return;
@@ -62,38 +54,25 @@ const Register: React.FC = () => {
     }
 
     setLoading(true);
-    
     try {
-      // Always register new users as regular users
-      const validRole = "user";
-      
+      // Register the user
       const success = await register(
         {
           name: formData.name,
           gender: formData.gender,
           email: formData.email,
           phone: formData.phone,
-          role: validRole,
+          role: "user",
         },
         formData.password
       );
 
       if (success) {
-        toast.success("Registration successful! Redirecting to login page...");
-        
-        // Use a timeout to show the success message before redirecting
-        setTimeout(() => {
-          setLoading(false);
-          navigate("/login");
-        }, 1500);
-      } else {
-        toast.error("Registration failed. Please try again.");
-        setLoading(false);
+        navigate("/login");
       }
     } catch (err) {
-      console.error("Registration error:", err);
-      setError((err as Error).message || "Registration failed. Please try again.");
-      toast.error((err as Error).message || "Registration failed. Please try again.");
+      setError("Registration failed. Please try again.");
+    } finally {
       setLoading(false);
     }
   };

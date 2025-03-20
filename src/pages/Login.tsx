@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Ambulance, Mail, Lock } from "lucide-react";
-import { toast } from "sonner";
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState("");
@@ -17,50 +16,24 @@ const Login: React.FC = () => {
 
   // Direct redirection after login
   useEffect(() => {
-    if (isAuthenticated && user) {
-      console.log("User authenticated, redirecting based on role:", user.role);
-      toast.success("Login successful!");
-      
-      // Force a small delay to ensure toast is visible
-      setTimeout(() => {
-        if (user.role === "admin") {
-          navigate("/admin/dashboard");
-        } else if (user.role === "driver") {
-          navigate("/driver/dashboard");
-        } else if (user.role === "user") {
-          navigate("/user/dashboard");
-        }
-      }, 500);
+    if (isAuthenticated) {
+      if (user?.role === "admin") {
+        navigate("/admin/dashboard");
+      } else if (user?.role === "driver") {
+        navigate("/driver/dashboard");
+      } else if (user?.role === "user") {
+        navigate("/user/dashboard");
+      }
     }
   }, [isAuthenticated, user, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password) {
-      toast.error("Please enter both email and password");
-      return;
-    }
-    
-    if (loading) return; // Prevent multiple submissions
-    
     setLoading(true);
-    console.log("Attempting login with:", email, password);
-    
     try {
-      const success = await login(email, password);
-      
-      if (!success) {
-        toast.error("Invalid login credentials. Please check your email and password.");
-        setLoading(false);
-        return;
-      }
-      
-      // Login was successful, but don't set loading to false here
-      // The useEffect will handle the redirection on successful login
-      
-    } catch (error) {
-      console.error("Login error:", error);
-      toast.error((error as Error).message || "Login failed. Please try again.");
+      await login(email, password);
+      // Navigation will happen in useEffect above
+    } finally {
       setLoading(false);
     }
   };

@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from "react";
+
+import React from "react";
 import { useNavigate } from "react-router-dom";
 import { RequestData } from "@/context/RequestContext";
 import { useAuth } from "@/context/AuthContext";
-import { Clock, Check, Star, XCircle } from "lucide-react";
+import { Clock, Check, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -14,27 +15,6 @@ interface RequestCardProps {
 const RequestCard: React.FC<RequestCardProps> = ({ request, role }) => {
   const navigate = useNavigate();
   const { getUserById } = useAuth();
-  const [driverData, setDriverData] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
-  
-  // Fetch driver data if assigned
-  useEffect(() => {
-    const fetchDriverData = async () => {
-      if (request.driverId) {
-        setLoading(true);
-        try {
-          const data = await getUserById(request.driverId);
-          setDriverData(data);
-        } catch (error) {
-          console.error("Error fetching driver data:", error);
-        } finally {
-          setLoading(false);
-        }
-      }
-    };
-    
-    fetchDriverData();
-  }, [request.driverId, getUserById]);
   
   // Format timestamp for display
   const formatDate = (date: Date) => {
@@ -46,6 +26,9 @@ const RequestCard: React.FC<RequestCardProps> = ({ request, role }) => {
       minute: '2-digit'
     });
   };
+  
+  // Get driver data if assigned
+  const driverData = request.driverId ? getUserById(request.driverId) : null;
   
   // Generate status badge
   const getStatusBadge = () => {
@@ -78,13 +61,6 @@ const RequestCard: React.FC<RequestCardProps> = ({ request, role }) => {
             Completed
           </div>
         );
-      case "cancelled":
-        return (
-          <div className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-            <XCircle className="w-3 h-3 mr-1" />
-            Cancelled
-          </div>
-        );
       default:
         return null;
     }
@@ -97,8 +73,7 @@ const RequestCard: React.FC<RequestCardProps> = ({ request, role }) => {
       request.status === "pending" && "border-l-4 border-l-yellow-500",
       request.status === "assigned" && "border-l-4 border-l-blue-500",
       request.status === "in-progress" && "border-l-4 border-l-indigo-500",
-      request.status === "completed" && "border-l-4 border-l-green-500",
-      request.status === "cancelled" && "border-l-4 border-l-red-500"
+      request.status === "completed" && "border-l-4 border-l-green-500"
     )}>
       <div className="flex justify-between items-start mb-3">
         <div>
