@@ -128,19 +128,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         if (session) {
           console.log("Existing session found:", session.user.id);
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', session.user.id)
-            .single();
           
-          if (profile) {
-            const userData = mapProfileToUserData(profile);
-            console.log("User profile loaded:", userData);
-            setUser(userData);
+          try {
+            const { data: profile, error: profileError } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', session.user.id)
+              .single();
+            
+            if (profileError) {
+              console.error("Error loading profile:", profileError.message);
+              // Even if profile loading fails, we consider the user authenticated
+              // but don't set a user profile
+              setIsAuthenticated(true);
+            } else if (profile) {
+              const userData = mapProfileToUserData(profile);
+              console.log("User profile loaded:", userData);
+              setUser(userData);
+              setIsAuthenticated(true);
+            } else {
+              console.log("No profile found for user:", session.user.id);
+              // User is still authenticated but has no profile
+              setIsAuthenticated(true);
+            }
+          } catch (profileError) {
+            console.error("Error in profile loading:", profileError);
+            // User is still authenticated even if profile loading fails
             setIsAuthenticated(true);
-          } else {
-            console.log("No profile found for user:", session.user.id);
           }
         } else {
           console.log("No existing session found");
@@ -162,22 +176,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         if (event === 'SIGNED_IN' && session) {
           try {
-            const { data: profile } = await supabase
-              .from('profiles')
-              .select('*')
-              .eq('id', session.user.id)
-              .single();
+            // First set the user as authenticated
+            setIsAuthenticated(true);
             
-            if (profile) {
-              const userData = mapProfileToUserData(profile);
-              console.log("User signed in, profile loaded:", userData);
-              setUser(userData);
-              setIsAuthenticated(true);
-            } else {
-              console.log("No profile found after sign in for user:", session.user.id);
+            try {
+              const { data: profile, error: profileError } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', session.user.id)
+                .single();
+              
+              if (profileError) {
+                console.error("Error loading profile after sign in:", profileError.message);
+                // We're still authenticated, just without a profile
+              } else if (profile) {
+                const userData = mapProfileToUserData(profile);
+                console.log("User signed in, profile loaded:", userData);
+                setUser(userData);
+              } else {
+                console.log("No profile found after sign in for user:", session.user.id);
+              }
+            } catch (profileError) {
+              console.error("Exception in profile loading after sign in:", profileError);
+              // Still authenticated, just without a profile
             }
           } catch (error) {
-            console.error("Error loading profile after sign in:", error);
+            console.error("Error in sign in process:", error);
           }
         } else if (event === 'SIGNED_OUT') {
           console.log("User signed out");
@@ -252,6 +276,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (data.user) {
         console.log("Supabase login successful for:", data.user.id);
         
+        // First mark as authenticated - this is crucial
+        setIsAuthenticated(true);
+        
         try {
           const { data: profile, error: profileError } = await supabase
             .from('profiles')
@@ -260,23 +287,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             .single();
           
           if (profileError) {
-            console.error("Error getting user profile:", profileError);
-            return false;
+            console.error("Error getting user profile:", profileError.message);
+            // We still consider this a successful login, even without a profile
+            // The user can use the app, but might have limited functionality
+            return true;
           }
           
           if (profile) {
             const userData = mapProfileToUserData(profile);
             console.log("User profile loaded:", userData);
             setUser(userData);
-            setIsAuthenticated(true);
             return true;
           } else {
-            console.error("No profile found for user:", data.user.id);
-            return false;
+            console.log("No profile found for user:", data.user.id);
+            // Consider creating a default profile here
+            // or returning true but with limited functionality
+            return true;
           }
         } catch (profileError) {
           console.error("Error loading user profile:", profileError);
-          return false;
+          // Still return true as authentication succeeded
+          return true;
         }
       }
       

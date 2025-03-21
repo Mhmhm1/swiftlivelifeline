@@ -36,6 +36,8 @@ const Login: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Reset error state
     if (!email || !password) {
       toast.error("Please enter both email and password");
       return;
@@ -44,19 +46,17 @@ const Login: React.FC = () => {
     if (loading) return; // Prevent multiple submissions
     
     setLoading(true);
-    console.log("Attempting login with:", email, password);
+    console.log("Attempting login with:", email);
     
     try {
       const success = await login(email, password);
       
+      // Always reset loading state regardless of success
       if (!success) {
         toast.error("Invalid login credentials. Please check your email and password.");
         setLoading(false);
-        return;
       }
-      
-      // Login was successful, but don't set loading to false here
-      // The useEffect will handle the redirection on successful login
+      // If success is true, we don't reset loading here as the useEffect will handle redirection
       
     } catch (error) {
       console.error("Login error:", error);
