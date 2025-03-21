@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Ambulance, Mail, Lock } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/use-toast";
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState("");
@@ -19,7 +19,11 @@ const Login: React.FC = () => {
   useEffect(() => {
     if (isAuthenticated && user) {
       console.log("User authenticated, redirecting based on role:", user.role);
-      toast.success("Login successful!");
+      toast({
+        title: "Success",
+        description: "Login successful!",
+        variant: "default",
+      });
       
       // Force a small delay to ensure toast is visible
       setTimeout(() => {
@@ -39,7 +43,11 @@ const Login: React.FC = () => {
     
     // Reset error state
     if (!email || !password) {
-      toast.error("Please enter both email and password");
+      toast({
+        title: "Error",
+        description: "Please enter both email and password",
+        variant: "destructive",
+      });
       return;
     }
     
@@ -51,16 +59,23 @@ const Login: React.FC = () => {
     try {
       const success = await login(email, password);
       
-      // Always reset loading state regardless of success
       if (!success) {
-        toast.error("Invalid login credentials. Please check your email and password.");
+        toast({
+          title: "Error",
+          description: "Invalid login credentials. Please check your email and password.",
+          variant: "destructive",
+        });
         setLoading(false);
       }
-      // If success is true, we don't reset loading here as the useEffect will handle redirection
+      // If successful, loading state will be reset by the redirect in useEffect
       
     } catch (error) {
       console.error("Login error:", error);
-      toast.error((error as Error).message || "Login failed. Please try again.");
+      toast({
+        title: "Error",
+        description: (error as Error).message || "Login failed. Please try again.",
+        variant: "destructive",
+      });
       setLoading(false);
     }
   };
