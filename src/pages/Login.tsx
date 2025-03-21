@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Ambulance, Mail, Lock } from "lucide-react";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState("");
@@ -19,22 +19,16 @@ const Login: React.FC = () => {
   useEffect(() => {
     if (isAuthenticated && user) {
       console.log("User authenticated, redirecting based on role:", user.role);
-      toast({
-        title: "Success",
-        description: "Login successful!",
-        variant: "default",
-      });
+      toast.success("Login successful!");
       
-      // Force a small delay to ensure toast is visible
-      setTimeout(() => {
-        if (user.role === "admin") {
-          navigate("/admin/dashboard");
-        } else if (user.role === "driver") {
-          navigate("/driver/dashboard");
-        } else if (user.role === "user") {
-          navigate("/user/dashboard");
-        }
-      }, 500);
+      // Redirect based on role
+      if (user.role === "admin") {
+        navigate("/admin/dashboard");
+      } else if (user.role === "driver") {
+        navigate("/driver/dashboard");
+      } else if (user.role === "user") {
+        navigate("/user/dashboard");
+      }
     }
   }, [isAuthenticated, user, navigate]);
 
@@ -43,11 +37,7 @@ const Login: React.FC = () => {
     
     // Reset error state
     if (!email || !password) {
-      toast({
-        title: "Error",
-        description: "Please enter both email and password",
-        variant: "destructive",
-      });
+      toast.error("Please enter both email and password");
       return;
     }
     
@@ -60,22 +50,14 @@ const Login: React.FC = () => {
       const success = await login(email, password);
       
       if (!success) {
-        toast({
-          title: "Error",
-          description: "Invalid login credentials. Please check your email and password.",
-          variant: "destructive",
-        });
+        toast.error("Invalid login credentials. Please check your email and password.");
         setLoading(false);
       }
-      // If successful, loading state will be reset by the redirect in useEffect
+      // If successful, loading state will be managed in AuthContext and reset after redirect
       
     } catch (error) {
       console.error("Login error:", error);
-      toast({
-        title: "Error",
-        description: (error as Error).message || "Login failed. Please try again.",
-        variant: "destructive",
-      });
+      toast.error((error as Error).message || "Login failed. Please try again.");
       setLoading(false);
     }
   };
