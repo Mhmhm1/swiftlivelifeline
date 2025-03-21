@@ -1,5 +1,5 @@
 
-// Import from the correct location
-import { useToast, toast } from "@/hooks/use-toast";
+// Re-export from the correct location
+import { toast } from "sonner";
 
-export { useToast, toast };
+export { toast };

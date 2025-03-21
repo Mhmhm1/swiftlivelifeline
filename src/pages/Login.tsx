@@ -21,14 +21,17 @@ const Login: React.FC = () => {
       console.log("User authenticated, redirecting based on role:", user.role);
       toast.success("Login successful!");
       
-      // Redirect based on role
-      if (user.role === "admin") {
-        navigate("/admin/dashboard");
-      } else if (user.role === "driver") {
-        navigate("/driver/dashboard");
-      } else if (user.role === "user") {
-        navigate("/user/dashboard");
-      }
+      // Small delay to ensure auth state is fully processed
+      setTimeout(() => {
+        // Redirect based on role
+        if (user.role === "admin") {
+          navigate("/admin/dashboard");
+        } else if (user.role === "driver") {
+          navigate("/driver/dashboard");
+        } else if (user.role === "user") {
+          navigate("/user/dashboard");
+        }
+      }, 200);
     }
   }, [isAuthenticated, user, navigate]);
 
@@ -47,14 +50,9 @@ const Login: React.FC = () => {
     console.log("Attempting login with:", email);
     
     try {
-      const success = await login(email, password);
-      
-      if (!success) {
-        toast.error("Invalid login credentials. Please check your email and password.");
-        setLoading(false);
-      }
-      // If successful, loading state will be managed in AuthContext and reset after redirect
-      
+      await login(email, password);
+      // Note: Not setting loading to false here as we want the loading state to persist until redirect
+      // The loading state will be visible to the user as feedback
     } catch (error) {
       console.error("Login error:", error);
       toast.error((error as Error).message || "Login failed. Please try again.");
