@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { toast } from "sonner";
 import { UserData, useAuth } from "./AuthContext";
@@ -18,7 +17,7 @@ export interface RequestData {
   location: string;
   emergencyType: string;
   additionalInfo: string;
-  status: "pending" | "assigned" | "in-progress" | "completed";
+  status: "pending" | "assigned" | "in-progress" | "completed" | "cancelled"; // Added "cancelled" status
   driverId?: string;
   timestamp: Date;
   rating?: number;
@@ -29,7 +28,7 @@ export interface RequestData {
 interface RequestContextType {
   requests: RequestData[];
   createRequest: (requestData: Omit<RequestData, "id" | "status" | "timestamp" | "chatHistory">) => string;
-  assignDriver: (requestId: string, driverId: string) => void;
+  assignDriver: (requestId: string, driverId: string) => Promise<void>;
   startJob: (requestId: string) => void;
   completeJob: (requestId: string) => void;
   rateService: (requestId: string, rating: number, feedback: string) => void;
@@ -37,13 +36,14 @@ interface RequestContextType {
   getDriverRequests: (driverId: string) => RequestData[];
   getRequestById: (requestId: string) => RequestData | undefined;
   sendMessage: (requestId: string, senderId: string, text: string) => void;
-  getUserById: (userId: string) => UserData | undefined;
+  getUserById: (userId: string) => Promise<UserData | undefined>;
+  getAllRequests: () => RequestData[]; // Add this line to fix the error
 }
 
 const RequestContext = createContext<RequestContextType>({
   requests: [],
   createRequest: () => "",
-  assignDriver: () => {},
+  assignDriver: async () => {},
   startJob: () => {},
   completeJob: () => {},
   rateService: () => {},
@@ -51,7 +51,8 @@ const RequestContext = createContext<RequestContextType>({
   getDriverRequests: () => [],
   getRequestById: () => undefined,
   sendMessage: () => {},
-  getUserById: () => undefined,
+  getUserById: async () => undefined,
+  getAllRequests: () => [], // Add this line to fix the error
 });
 
 export const RequestProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -100,22 +101,27 @@ export const RequestProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return id;
   };
 
-  const assignDriver = (requestId: string, driverId: string) => {
-    const driverData = getUserById(driverId);
-    if (!driverData) {
-      toast.error("Driver not found");
-      return;
-    }
+  const assignDriver = async (requestId: string, driverId: string) => {
+    try {
+      const driverData = await getUserById(driverId);
+      if (!driverData) {
+        toast.error("Driver not found");
+        return;
+      }
 
-    setRequests(prev => 
-      prev.map(req => 
-        req.id === requestId 
-          ? { ...req, driverId, status: "assigned" } 
-          : req
-      )
-    );
-    
-    toast.success(`Request assigned to ${driverData.name}`);
+      setRequests(prev => 
+        prev.map(req => 
+          req.id === requestId 
+            ? { ...req, driverId, status: "assigned" } 
+            : req
+        )
+      );
+      
+      toast.success(`Request assigned to ${driverData.name}`);
+    } catch (error) {
+      console.error("Error assigning driver:", error);
+      toast.error("Failed to assign driver");
+    }
   };
 
   const startJob = (requestId: string) => {
@@ -186,6 +192,11 @@ export const RequestProvider: React.FC<{ children: React.ReactNode }> = ({ child
     );
   };
 
+  // Add the getAllRequests function implementation
+  const getAllRequests = () => {
+    return requests;
+  };
+
   return (
     <RequestContext.Provider
       value={{
@@ -200,6 +211,7 @@ export const RequestProvider: React.FC<{ children: React.ReactNode }> = ({ child
         getRequestById,
         sendMessage,
         getUserById,
+        getAllRequests, // Add this line to expose the function
       }}
     >
       {children}

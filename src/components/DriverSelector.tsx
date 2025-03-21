@@ -1,11 +1,12 @@
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useRequest } from "@/context/RequestContext";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
+import { UserData } from "@/context/AuthContext";
 
 interface DriverSelectorProps {
   requestId: string;
@@ -13,21 +14,45 @@ interface DriverSelectorProps {
 
 const DriverSelector: React.FC<DriverSelectorProps> = ({ requestId }) => {
   const [selectedDriverId, setSelectedDriverId] = useState<string>("");
+  const [availableDrivers, setAvailableDrivers] = useState<UserData[]>([]);
   const { getAvailableDrivers } = useAuth();
   const { assignDriver, getRequestById } = useRequest();
+  const [request, setRequest] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   
-  const request = getRequestById(requestId);
-  const availableDrivers = getAvailableDrivers();
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const requestData = getRequestById(requestId);
+        setRequest(requestData);
+        
+        const driversData = await getAvailableDrivers();
+        setAvailableDrivers(driversData || []);
+      } catch (error) {
+        console.error("Error fetching data:", error);
+        toast.error("Failed to load drivers data");
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchData();
+  }, [requestId, getAvailableDrivers, getRequestById]);
   
-  const handleAssignDriver = () => {
+  const handleAssignDriver = async () => {
     if (!selectedDriverId) {
       toast.error("Please select a driver");
       return;
     }
     
-    assignDriver(requestId, selectedDriverId);
+    await assignDriver(requestId, selectedDriverId);
     setSelectedDriverId("");
   };
+  
+  if (loading) {
+    return <div className="p-4">Loading driver data...</div>;
+  }
   
   if (!request) {
     return <div>Request not found</div>;
