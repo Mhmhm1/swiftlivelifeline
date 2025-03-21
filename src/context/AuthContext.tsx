@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -80,6 +81,23 @@ interface AuthContextType {
   migrateMockDataToSupabase: () => Promise<{ success: boolean, message: string, results: any[] }>;
 }
 
+// Helper function to map Supabase profile to UserData
+const mapProfileToUserData = (profile: any): UserData => {
+  return {
+    id: profile.id,
+    name: profile.name || 'Unknown User',
+    email: profile.email || '',
+    role: profile.role as UserRole || 'user',
+    phone: profile.phone,
+    gender: profile.status, // Using status field for gender temporarily
+    profileImage: profile.photo_url,
+    vehicleNumber: profile.license_number, // Using license_number for vehicle_number
+    available: profile.status === 'available', // Using status field to derive available
+    location: profile.current_location,
+    onSchedule: profile.current_job !== null, // If there's a current job, they're on schedule
+  };
+};
+
 // Create a context with a default value
 const AuthContext = createContext<AuthContextType>({
   isAuthenticated: false,
@@ -97,23 +115,6 @@ const AuthContext = createContext<AuthContextType>({
   migrateMockDataToSupabase: async () => ({ success: false, message: "Not implemented", results: [] }),
 });
 
-// Helper function to map Supabase profile to UserData
-const mapProfileToUserData = (profile: any): UserData => {
-  return {
-    id: profile.id,
-    name: profile.name,
-    email: profile.email || '',
-    role: profile.role as UserRole,
-    phone: profile.phone,
-    gender: profile.status, // Using status field for gender temporarily
-    profileImage: profile.photo_url,
-    vehicleNumber: profile.license_number, // Using license_number for vehicle_number
-    available: profile.status === 'available', // Using status field to derive available
-    location: profile.current_location,
-    onSchedule: profile.current_job !== null, // If there's a current job, they're on schedule
-  };
-};
-
 // Create a provider component
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
@@ -129,6 +130,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (session) {
           console.log("Existing session found:", session.user.id);
           
+          // Set as authenticated immediately
+          setIsAuthenticated(true);
+          
           try {
             const { data: profile, error: profileError } = await supabase
               .from('profiles')
@@ -138,23 +142,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             
             if (profileError) {
               console.error("Error loading profile:", profileError.message);
-              // Even if profile loading fails, we consider the user authenticated
-              // but don't set a user profile
-              setIsAuthenticated(true);
+              // Create a basic user object from session data if profile can't be loaded
+              setUser({
+                id: session.user.id,
+                email: session.user.email || '',
+                name: session.user.user_metadata?.name || 'User',
+                role: (session.user.user_metadata?.role as UserRole) || 'user',
+              });
             } else if (profile) {
               const userData = mapProfileToUserData(profile);
               console.log("User profile loaded:", userData);
               setUser(userData);
-              setIsAuthenticated(true);
             } else {
               console.log("No profile found for user:", session.user.id);
-              // User is still authenticated but has no profile
-              setIsAuthenticated(true);
+              // Create a basic user object from session data
+              setUser({
+                id: session.user.id,
+                email: session.user.email || '',
+                name: session.user.user_metadata?.name || 'User',
+                role: (session.user.user_metadata?.role as UserRole) || 'user',
+              });
             }
           } catch (profileError) {
             console.error("Error in profile loading:", profileError);
-            // User is still authenticated even if profile loading fails
-            setIsAuthenticated(true);
+            // Create a basic user object from session data
+            setUser({
+              id: session.user.id,
+              email: session.user.email || '',
+              name: session.user.user_metadata?.name || 'User',
+              role: (session.user.user_metadata?.role as UserRole) || 'user',
+            });
           }
         } else {
           console.log("No existing session found");
@@ -188,17 +205,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               
               if (profileError) {
                 console.error("Error loading profile after sign in:", profileError.message);
-                // We're still authenticated, just without a profile
+                // Create a basic user object from session data
+                setUser({
+                  id: session.user.id,
+                  email: session.user.email || '',
+                  name: session.user.user_metadata?.name || 'User',
+                  role: (session.user.user_metadata?.role as UserRole) || 'user',
+                });
               } else if (profile) {
                 const userData = mapProfileToUserData(profile);
                 console.log("User signed in, profile loaded:", userData);
                 setUser(userData);
               } else {
                 console.log("No profile found after sign in for user:", session.user.id);
+                // Create a basic user object from session data
+                setUser({
+                  id: session.user.id,
+                  email: session.user.email || '',
+                  name: session.user.user_metadata?.name || 'User',
+                  role: (session.user.user_metadata?.role as UserRole) || 'user',
+                });
               }
             } catch (profileError) {
               console.error("Exception in profile loading after sign in:", profileError);
-              // Still authenticated, just without a profile
+              // Create a basic user object from session data
+              setUser({
+                id: session.user.id,
+                email: session.user.email || '',
+                name: session.user.user_metadata?.name || 'User',
+                role: (session.user.user_metadata?.role as UserRole) || 'user',
+              });
             }
           } catch (error) {
             console.error("Error in sign in process:", error);
@@ -279,6 +315,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // First mark as authenticated - this is crucial
         setIsAuthenticated(true);
         
+        // Extract basic user info from the data.user object
+        setUser({
+          id: data.user.id,
+          email: data.user.email || '',
+          name: data.user.user_metadata?.name || data.user.email?.split('@')[0] || 'User',
+          role: (data.user.user_metadata?.role as UserRole) || 'user'
+        });
+        
+        // Then try to load the profile, but continue even if it fails
         try {
           const { data: profile, error: profileError } = await supabase
             .from('profiles')
@@ -288,8 +333,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           
           if (profileError) {
             console.error("Error getting user profile:", profileError.message);
-            // We still consider this a successful login, even without a profile
-            // The user can use the app, but might have limited functionality
+            // We already set basic user info above, so just return true to continue
             return true;
           }
           
@@ -297,18 +341,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const userData = mapProfileToUserData(profile);
             console.log("User profile loaded:", userData);
             setUser(userData);
-            return true;
-          } else {
-            console.log("No profile found for user:", data.user.id);
-            // Consider creating a default profile here
-            // or returning true but with limited functionality
-            return true;
           }
         } catch (profileError) {
           console.error("Error loading user profile:", profileError);
-          // Still return true as authentication succeeded
-          return true;
+          // Continue with basic user data we already set
         }
+        
+        return true;
       }
       
       return false;
